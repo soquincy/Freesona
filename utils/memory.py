@@ -52,6 +52,9 @@ def get_memory(channel_id: int) -> deque:
 
 def memory_to_contents(channel_id: int) -> list:
     contents = []
+    # Tracks the username per content index — avoids monkey-patching types.Content
+    content_usernames: dict[int, str] = {}
+
     summary = channel_summary.get(channel_id)
 
     if summary:
@@ -65,13 +68,21 @@ def memory_to_contents(channel_id: int) -> list:
         ))
 
     for entry in get_memory(channel_id):
-        if contents and contents[-1].role == entry["role"]:
-            contents[-1].parts[0].text += f"\n{entry['text']}"
+        last_idx  = len(contents) - 1
+        last      = contents[last_idx] if contents else None
+        same_role = last is not None and last.role == entry["role"]
+        same_user = entry.get("username", "") == content_usernames.get(last_idx, "")
+
+        if same_role and same_user:
+            assert last is not None  # guaranteed by same_role check above
+            last.parts[0].text += f"\n{entry['text']}"
         else:
-            contents.append(types.Content(
+            turn = types.Content(
                 role=entry["role"],
                 parts=[types.Part(text=entry["text"])]
-            ))
+            )
+            contents.append(turn)
+            content_usernames[len(contents) - 1] = entry.get("username", "")
 
     return contents
 
@@ -97,13 +108,14 @@ async def maybe_summarize(channel_id: int, client, model_name: str):
         logger.warning(f"Summary failed: {e}")
 
 
-def push_memory(channel_id: int, role: str, text: str, display: str = "", *, client=None, model_name: str = ""):
+def push_memory(channel_id: int, role: str, text: str, display: str = "", *, client=None, model_name: str = "", username: str = ""):
     if client and model_name:
         asyncio.create_task(maybe_summarize(channel_id, client, model_name))
     get_memory(channel_id).append({
-        "role":    role,
-        "text":    text,
-        "display": display or text,
+        "role":     role,
+        "text":     text,
+        "display":  display or text,
+        "username": username,  # tracked to prevent cross-user turn merging
     })
 
 # ---------------------------------------------------------------------------
@@ -187,57 +199,78 @@ def _make_key(guild_id: int, user_id: int) -> str:
     return f"{guild_id}:{user_id}"
 
 
-def _load_all() -> dict[str, dict]:
+# ---------------------------------------------------------------------------
+# In-memory cache + async lock
+# Prevents concurrent writes from clobbering each other and keeps
+# file I/O off the main event loop.
+# ---------------------------------------------------------------------------
+
+_memory_cache: dict[str, dict] = {}
+_cache_loaded: bool = False
+_memory_lock: asyncio.Lock = asyncio.Lock()
+
+
+def _load_cache_sync():
+    """Load from disk into cache synchronously — only called once at startup."""
+    global _memory_cache, _cache_loaded
     if os.path.exists(MEMORY_FILE_PATH):
         try:
             with open(MEMORY_FILE_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
+                _memory_cache = json.load(f)
         except Exception as e:
             logger.error(f"Long-term memory load error: {e}")
-    return {}
+            _memory_cache = {}
+    _cache_loaded = True
 
 
-def _save_all(data: dict[str, dict]):
+def _ensure_cache_loaded():
+    if not _cache_loaded:
+        _load_cache_sync()
+
+
+async def _flush_cache():
+    """Write the in-memory cache to disk. Must be called under _memory_lock."""
     os.makedirs(
         os.path.dirname(MEMORY_FILE_PATH) if os.path.dirname(MEMORY_FILE_PATH) else ".",
         exist_ok=True
     )
-    try:
+    def _write():
         with open(MEMORY_FILE_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        logger.error(f"Long-term memory save error: {e}")
+            json.dump(_memory_cache, f, indent=2, ensure_ascii=False)
+
+    await asyncio.to_thread(_write)
 
 
 def load_user_memory(guild_id: int, user_id: int) -> Optional[UserMemory]:
-    key  = _make_key(guild_id, user_id)
-    data = _load_all()
-    if key in data:
-        return UserMemory.from_dict(data[key])
+    _ensure_cache_loaded()
+    key = _make_key(guild_id, user_id)
+    if key in _memory_cache:
+        return UserMemory.from_dict(_memory_cache[key])
     return None
 
 
-def save_user_memory(guild_id: int, user_id: int, memory: UserMemory):
-    key  = _make_key(guild_id, user_id)
-    data = _load_all()
-    data[key] = memory.to_dict()
-    _save_all(data)
+async def save_user_memory_async(guild_id: int, user_id: int, memory: UserMemory):
+    """Async, atomic write — safe for concurrent callers."""
+    _ensure_cache_loaded()
+    key = _make_key(guild_id, user_id)
+    async with _memory_lock:
+        _memory_cache[key] = memory.to_dict()
+        await _flush_cache()
 
 
 def inject_user_memory(guild_id: int, user_id: int, display_name: str) -> str:
     """
     Returns a prompt block of known facts about the user.
     Returns empty string if no facts exist.
-    Also updates display_name on disk if it changed.
+    Also schedules a display_name update if it changed.
     """
     mem = load_user_memory(guild_id, user_id)
     if mem is None:
         return ""
 
-    # Update display_name if it changed
     if mem.display_name != display_name:
         mem.display_name = display_name
-        save_user_memory(guild_id, user_id, mem)
+        asyncio.create_task(save_user_memory_async(guild_id, user_id, mem))
 
     return mem.to_prompt_block()
 
@@ -310,7 +343,7 @@ async def extract_and_store_fact(
 
         mem.display_name = display_name  # always keep current
         mem.add_fact(fact)
-        save_user_memory(guild_id, user_id, mem)
+        await save_user_memory_async(guild_id, user_id, mem)
 
         logger.info(
             f"Stored fact for {guild_id}:{user_id} "

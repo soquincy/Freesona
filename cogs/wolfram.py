@@ -8,6 +8,9 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from urllib.parse import quote
+from dotenv import load_dotenv
+
+load_dotenv()
 
 WOLFRAM_SHORT_APPID = os.getenv("WOLFRAM_APPID_SHORT")
 WOLFRAM_LLM_APPID = os.getenv("WOLFRAM_APPID_LLM")

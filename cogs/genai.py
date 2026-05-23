@@ -88,8 +88,50 @@ class GenAICog(commands.Cog):
         if ctx.valid:
             return
 
-        # Autonomy check — intent-first, no random.random()
         config = load_config()
+
+        # -------------------------------------------------------------------
+        # Conversation channel — bot responds to ALL messages here
+        # -------------------------------------------------------------------
+        chat_channel_id = config.get("chat_channel_id")
+        if chat_channel_id and message.channel.id == chat_channel_id:
+            user_id           = message.author.id
+            content_snapshot  = message.content
+            channel_snapshot  = message.channel
+            username_snapshot = message.author.display_name
+            message_snapshot  = message
+            guild_id_snapshot = message.guild.id  # guild is non-None; already checked above
+
+            if user_id in _pending_responses:
+                _pending_responses[user_id].cancel()
+                logger.debug(f"Debounce: cancelled pending task for user {user_id}")
+
+            async def debounced_respond():
+                try:
+                    await asyncio.sleep(DEBOUNCE_SECONDS)
+                    attachments = await extract_attachments(message_snapshot)
+                    response = await safe_generate(
+                        content_snapshot or "What's in this image?",
+                        current_persona=CURRENT_PERSONA,
+                        channel_id=channel_snapshot.id,
+                        guild_id=guild_id_snapshot,
+                        user_id=user_id,
+                        message_id=message_snapshot.id,
+                        username=username_snapshot,
+                        attachments=attachments,
+                    )
+                    await send_response(response, channel_snapshot, reply_to=message_snapshot)
+                except asyncio.CancelledError:
+                    logger.debug(f"Debounce: task cancelled for user {user_id}")
+                finally:
+                    _pending_responses.pop(user_id, None)
+
+            _pending_responses[user_id] = asyncio.create_task(debounced_respond())
+            return
+
+        # -------------------------------------------------------------------
+        # Autonomy — bot chimes in on other channels unprompted
+        # -------------------------------------------------------------------
         autonomy_on = config.get("autonomy", False)
 
         if autonomy_on and not message.author.bot:
@@ -119,41 +161,13 @@ class GenAICog(commands.Cog):
                         message.content,
                         current_persona=CURRENT_PERSONA,
                         channel_id=message.channel.id,
+                        guild_id=message.guild.id,
+                        user_id=message.author.id,
+                        message_id=message.id,
                         username=message.author.display_name,
                         attachments=attachments,
                     )
                     await send_response(response, message.channel)
-                    return
-
-        # Debounce
-        user_id           = message.author.id
-        content_snapshot  = message.content
-        channel_snapshot  = message.channel
-        username_snapshot = message.author.display_name
-        message_snapshot  = message
-
-        if user_id in _pending_responses:
-            _pending_responses[user_id].cancel()
-            logger.debug(f"Debounce: cancelled pending task for user {user_id}")
-
-        async def debounced_respond():
-            try:
-                await asyncio.sleep(DEBOUNCE_SECONDS)
-                attachments = await extract_attachments(message_snapshot)
-                response = await safe_generate(
-                    content_snapshot or "What's in this image?",
-                    current_persona=CURRENT_PERSONA,
-                    channel_id=channel_snapshot.id,
-                    username=username_snapshot,
-                    attachments=attachments,
-                )
-                await send_response(response, channel_snapshot, reply_to=message_snapshot)
-            except asyncio.CancelledError:
-                logger.debug(f"Debounce: task cancelled for user {user_id}")
-            finally:
-                _pending_responses.pop(user_id, None)
-
-        _pending_responses[user_id] = asyncio.create_task(debounced_respond())
 
     # -------------------------------------------------------------------
     # ~write

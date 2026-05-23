@@ -10,7 +10,7 @@ Freesona is different. It's a free, open alternative to hosted persona bots — 
 
 No credits. No voting. No "upgrade to unlock." Just a bot that does what you tell it.
 
-→ [Features](docs/FEATURES.md) · [Commands](docs/COMMANDS.md) · [Discord](https://discord.gg/vXPRs2cHSE)
+→ [Features](docs/features.md) · [Commands](docs/commands.md) · [Discord](https://discord.gg/vXPRs2cHSE)
 
 ---
 
@@ -20,9 +20,11 @@ No credits. No voting. No "upgrade to unlock." Just a bot that does what you tel
 
 **It remembers — short and long term.** Short-term: rolling per-channel context with automatic summarization. Long-term: facts about each user are extracted, scored by importance, and persisted to disk — injected automatically into future conversations.
 
+**It knows who's talking.** Every message is prefixed with the speaker's display name before being sent to the model, so Gemini can distinguish between multiple users in the same channel.
+
 **It won't double-reply.** A per-user debounce collapses rapid successive messages into one response.
 
-**It can chime in on its own — intelligently.** Autonomous mode uses a confidence-scored intent evaluator, not random chance. Per-channel and per-user cooldowns prevent it from dominating a conversation.
+**It can chime in on its own — intelligently.** Autonomous mode uses a confidence-scored intent evaluator, not random chance. Per-channel cooldowns prevent it from dominating a conversation.
 
 **It handles more than text.** Attach images, PDFs, audio, video, or code files — all processed through Gemini's multimodal pipeline.
 
@@ -53,12 +55,14 @@ BOT_NAME=Freesona
 
 # Local
 AI_PERSONA_FILE=persona.txt
+AI_PERSONA_JSON_FILE=persona.json
 AI_PERSONAS_FILE=personas.json
 CONFIG_FILE_PATH=config.json
 MEMORY_FILE_PATH=memory.json
 
 # Cloud (Railway/Render — requires /etc/secrets volume mount)
 # AI_PERSONA_FILE=/etc/secrets/persona.txt
+# AI_PERSONA_JSON_FILE=/etc/secrets/persona.json
 # AI_PERSONAS_FILE=/etc/secrets/personas.json
 # CONFIG_FILE_PATH=/etc/secrets/config.json
 # MEMORY_FILE_PATH=/etc/secrets/memory.json
@@ -91,7 +95,7 @@ Short-term conversation memory is in-session only — cleared on restart or via 
 
 * [discord.py](https://discordpy.readthedocs.io/)
 * [Google Gemini](https://ai.google.dev/)
-* [Wolfram|Alpha](https://developer.wolframalpha.com/)
+* [Wolfram\|Alpha](https://developer.wolframalpha.com/)
 * [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 * [MVSEP](https://mvsep.com/)
 

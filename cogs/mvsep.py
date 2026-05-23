@@ -70,12 +70,13 @@ class MVSepCog(commands.Cog):
 
         if file_path:
             assert file_path is not None
-            data.add_field(
-                "audiofile",
-                open(file_path, "rb"),
-                filename=os.path.basename(file_path),
-                content_type="audio/mpeg",
-            )
+            with open(file_path, "rb") as audio_file:
+                data.add_field(
+                    "audiofile",
+                    audio_file.read(),
+                    filename=os.path.basename(file_path),
+                    content_type="audio/mpeg",
+                )
         elif url:
             assert url is not None
             data.add_field("url", url)

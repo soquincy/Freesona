@@ -305,10 +305,14 @@ async def generate(
             return build_response("I can't respond to that.")
 
         if channel_id is not None:
-            push_memory(channel_id, "user", user_text, display_text,
-                        client=client, model_name=MODEL_NAME)
-            push_memory(channel_id, "model", text, f"{BOT_NAME}: {text}",
-                        client=client, model_name=MODEL_NAME)
+            # Use display_text (username-prefixed) as the model-facing text so Gemini
+            # can distinguish between speakers in a multi-user channel. display_text is
+            # already formatted as "Username: <prompt>" in generate(). For model turns
+            # we keep the same convention with BOT_NAME as the speaker prefix.
+            push_memory(channel_id, "user", display_text, display_text,
+                        client=client, model_name=MODEL_NAME, username=username)
+            push_memory(channel_id, "model", f"{BOT_NAME}: {text}", f"{BOT_NAME}: {text}",
+                        client=client, model_name=MODEL_NAME, username=BOT_NAME)
 
         # Fire fact extraction async — never blocks response
         if guild_id and user_id and message_id and channel_id and prompt.strip():
