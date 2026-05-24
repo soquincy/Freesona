@@ -1,13 +1,49 @@
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
 venv/
 .venv/
-persona.txt
+ENV/
+
+# Environment variables
+.env
+.env.*
+!.env.sample
+
+# Runtime / bot state
+memory.json
 persona.json
 personas.json
-memory.json
-*.env
+
+# User/private notes
+persona.txt
 pnotes.md
+
+# Tool caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-*.pyc
+
+# Logs
+logs/
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# IDE/editor
+.vscode/
+.idea/
+
+# Build/distribution
+build/
+dist/
+*.egg-info/
+
+# Python tooling
+.coverage
+htmlcov/
