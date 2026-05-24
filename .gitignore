@@ -1,5 +1,13 @@
 __pycache__/
 venv/
+.venv/
 persona.txt
+persona.json
+personas.json
+memory.json
 *.env
 pnotes.md
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.pyc

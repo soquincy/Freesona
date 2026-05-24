@@ -1,0 +1,154 @@
+# cogs/admin.py: Owner/admin runtime controls.
+
+import discord
+from discord.ext import commands
+
+from utils.config import load_config, save_config, get_model_name
+from utils.modules import OPTIONAL_MODULES, load_enabled_modules, module_extension, save_module_state
+
+
+class AdminCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    # ------------------------------------------------------------------
+    # /module
+    # ------------------------------------------------------------------
+    @commands.hybrid_group(name="module", invoke_without_command=True, help="List or change enabled bot modules.")
+    @commands.has_permissions(administrator=True)
+    async def module_group(self, ctx):
+        await ctx.send("Use `/module list`, `/module enable`, `/module disable`, or `/module reload`.", ephemeral=True if ctx.interaction else False)
+
+    @module_group.command(name="list", help="List enabled and disabled modules.")
+    @commands.has_permissions(administrator=True)
+    async def module_list(self, ctx):
+        config = load_config()
+        enabled = load_enabled_modules(config)
+        lines = []
+        for name, ext in OPTIONAL_MODULES.items():
+            configured = enabled.get(name, True)
+            loaded = ext in self.bot.extensions
+            state = "on" if configured else "off"
+            runtime = "loaded" if loaded else "unloaded"
+            lines.append(f"`{name}`: {state} ({runtime})")
+
+        embed = discord.Embed(
+            title="Modules",
+            description="\n".join(lines),
+            color=discord.Color.blurple(),
+        )
+        await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
+
+    @module_group.command(name="enable", help="Enable a module and load it now.")
+    @commands.has_permissions(administrator=True)
+    async def module_enable(self, ctx, name: str):
+        key = name.lower().strip()
+        ext = module_extension(key)
+        if ext is None:
+            await ctx.send(f"Unknown module `{key}`.", ephemeral=True if ctx.interaction else False)
+            return
+
+        config = load_config()
+        enabled = load_enabled_modules(config)
+        if key == "mvsep" and not enabled.get("ytdlp", True):
+            await ctx.send("Enable `ytdlp` before enabling `mvsep`.", ephemeral=True if ctx.interaction else False)
+            return
+
+        if ext not in self.bot.extensions:
+            try:
+                await self.bot.load_extension(ext)
+            except Exception as e:
+                await ctx.send(f"Could not load `{key}`: `{e}`", ephemeral=True if ctx.interaction else False)
+                return
+
+        save_module_state(config, key, True)
+        save_config(config)
+        await self.bot.tree.sync()
+        await ctx.send(f"Module `{key}` enabled.", ephemeral=True if ctx.interaction else False)
+
+    @module_group.command(name="disable", help="Disable a module and unload it now.")
+    @commands.has_permissions(administrator=True)
+    async def module_disable(self, ctx, name: str):
+        key = name.lower().strip()
+        ext = module_extension(key)
+        if ext is None:
+            await ctx.send(f"Unknown module `{key}`.", ephemeral=True if ctx.interaction else False)
+            return
+
+        config = load_config()
+        enabled = load_enabled_modules(config)
+        if key == "ytdlp" and enabled.get("mvsep", True):
+            await ctx.send("Disable `mvsep` before disabling `ytdlp`.", ephemeral=True if ctx.interaction else False)
+            return
+
+        if ext in self.bot.extensions:
+            try:
+                await self.bot.unload_extension(ext)
+            except Exception as e:
+                await ctx.send(f"Could not unload `{key}`: `{e}`", ephemeral=True if ctx.interaction else False)
+                return
+
+        save_module_state(config, key, False)
+        save_config(config)
+        await self.bot.tree.sync()
+        await ctx.send(f"Module `{key}` disabled.", ephemeral=True if ctx.interaction else False)
+
+    @module_group.command(name="reload", help="Reload an enabled module.")
+    @commands.has_permissions(administrator=True)
+    async def module_reload(self, ctx, name: str):
+        key = name.lower().strip()
+        ext = module_extension(key)
+        if ext is None:
+            await ctx.send(f"Unknown module `{key}`.", ephemeral=True if ctx.interaction else False)
+            return
+
+        config = load_config()
+        enabled = load_enabled_modules(config)
+        if not enabled.get(key, True):
+            await ctx.send(f"Module `{key}` is disabled. Enable it first.", ephemeral=True if ctx.interaction else False)
+            return
+
+        try:
+            if ext in self.bot.extensions:
+                await self.bot.reload_extension(ext)
+            else:
+                await self.bot.load_extension(ext)
+        except Exception as e:
+            await ctx.send(f"Reload failed for `{key}`: `{e}`", ephemeral=True if ctx.interaction else False)
+            return
+
+        await self.bot.tree.sync()
+        await ctx.send(f"Module `{key}` reloaded.", ephemeral=True if ctx.interaction else False)
+
+    # ------------------------------------------------------------------
+    # /model
+    # ------------------------------------------------------------------
+    @commands.hybrid_group(name="model", invoke_without_command=True, help="Show or change the Gemini model.")
+    @commands.is_owner()
+    async def model_group(self, ctx):
+        await ctx.send(f"Current model: `{get_model_name()}`", ephemeral=True if ctx.interaction else False)
+
+    @model_group.command(name="show", help="Show the active Gemini model.")
+    @commands.is_owner()
+    async def model_show(self, ctx):
+        await ctx.send(f"Current model: `{get_model_name()}`", ephemeral=True if ctx.interaction else False)
+
+    @model_group.command(name="set", help="Set the Gemini model.")
+    @commands.is_owner()
+    async def model_set(self, ctx, name: str):
+        config = load_config()
+        config["model_name"] = name.strip()
+        save_config(config)
+        await ctx.send(f"Model set to `{get_model_name()}`.", ephemeral=True if ctx.interaction else False)
+
+    @model_group.command(name="reset", help="Reset the Gemini model to the environment/default value.")
+    @commands.is_owner()
+    async def model_reset(self, ctx):
+        config = load_config()
+        config.pop("model_name", None)
+        save_config(config)
+        await ctx.send(f"Model reset to `{get_model_name()}`.", ephemeral=True if ctx.interaction else False)
+
+
+async def setup(bot):
+    await bot.add_cog(AdminCog(bot))

@@ -1,5 +1,4 @@
 # utils/generation.py: Core AI generation pipeline, response types, and message sender.
-# This module handles all interactions with the Gemini API, including prompt assembly, response parsing, error handling, and rate limiting.
 
 import os
 import re
@@ -14,9 +13,9 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from utils.memory import memory_to_contents, push_memory
+from utils.memory import memory_to_contents, push_memory, inject_user_memory, extract_and_store_fact
 from utils.security import sanitize_prompt, unsafe_output
-from utils.config import LAST_DEBUG
+from utils.config import LAST_DEBUG, get_model_name
 
 load_dotenv()
 
@@ -24,7 +23,6 @@ logger = logging.getLogger("FreesonaBot")
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 BOT_NAME       = os.getenv("BOT_NAME", "Bot")
-MODEL_NAME     = "gemini-flash-lite-latest"
 
 # Split messaging
 SPLIT_MIN_LENGTH     = 280
@@ -196,19 +194,48 @@ async def send_response(
 # Attachment helper
 # ---------------------------------------------------------------------------
 
-async def extract_image(message: Optional[discord.Message]) -> tuple[Optional[bytes], Optional[str]]:
-    """Extract all image attachments and return them as a list of (bytes, mime_type) tuples."""
+SUPPORTED_MIME_TYPES = {
+    # Images
+    "image/png", "image/jpeg", "image/webp", "image/gif", "image/heic", "image/heif",
+    # Documents
+    "application/pdf",
+    "text/plain", "text/html", "text/css", "text/markdown", "text/csv",
+    "text/xml", "text/rtf",
+    "application/rtf",
+    # Code
+    "application/x-javascript", "text/javascript",
+    "application/x-python", "text/x-python",
+    # Audio
+    "audio/mpeg", "audio/mp3", "audio/wav", "audio/aiff",
+    "audio/aac", "audio/ogg", "audio/flac", "audio/x-flac",
+    # Video
+    "video/mp4", "video/mpeg", "video/mov", "video/quicktime",
+    "video/avi", "video/x-msvideo", "video/webm",
+    "video/wmv", "video/x-ms-wmv", "video/3gpp",
+}
+
+async def extract_attachments(message: Optional[discord.Message]) -> list[tuple[bytes, str]]:
+    """
+    Extract all supported attachments (images + PDFs) from a message.
+    Returns a list of (bytes, mime_type) tuples in attachment order.
+    """
     if not message or not message.attachments:
-        return None, None
-    # Process first image attachment for now; multi-image batch is roadmap
+        return []
+
+    results = []
     for att in message.attachments:
-        if att.content_type and "image" in att.content_type:
-            try:
-                image_bytes = await att.read()
-                return image_bytes, att.content_type
-            except Exception as e:
-                logger.error(f"Failed to read attachment: {e}")
-    return None, None
+        mime = att.content_type or ""
+        # Strip parameters e.g. "image/png; charset=utf-8" -> "image/png"
+        mime_base = mime.split(";")[0].strip()
+        if mime_base not in SUPPORTED_MIME_TYPES:
+            continue
+        try:
+            data = await att.read()
+            results.append((data, mime_base))
+        except Exception as e:
+            logger.error(f"Failed to read attachment {att.filename}: {e}")
+
+    return results
 
 # ---------------------------------------------------------------------------
 # Core generation
@@ -219,11 +246,13 @@ async def generate(
     *,
     current_persona: str,
     channel_id: Optional[int] = None,
+    guild_id: Optional[int] = None,
+    user_id: Optional[int] = None,
+    message_id: Optional[int] = None,
     apply_persona: bool = True,
     instruction_prefix: str = "",
     username: str = "",
-    image_bytes: Optional[bytes] = None,
-    image_mime: Optional[str] = None,
+    attachments: Optional[list[tuple[bytes, str]]] = None,
 ) -> ConversationResponse:
     await rate_limit()
     prompt = sanitize_prompt(prompt)
@@ -233,13 +262,20 @@ async def generate(
     user_text = f"{instruction_prefix}\n\n{prompt}".strip() if instruction_prefix else prompt
     display_text = f"{username}: {prompt}" if username else prompt
 
+    # Inject long-term user memory into system prompt
+    persona = current_persona if apply_persona else ""
+    if apply_persona and guild_id and user_id:
+        memory_block = inject_user_memory(guild_id, user_id, username)
+        if memory_block:
+            persona = f"{current_persona}\n\n{memory_block}"
+
     parts = []
     if user_text:
         parts.append(types.Part(text=user_text))
-    if image_bytes:
-        parts.append(types.Part.from_bytes(data=image_bytes, mime_type=image_mime or "image/png"))
+    for att_bytes, att_mime in (attachments or []):
+        parts.append(types.Part.from_bytes(data=att_bytes, mime_type=att_mime))
     if not parts:
-        parts.append(types.Part(text="Describe this image"))
+        parts.append(types.Part(text="Describe this."))
 
     contents.append(types.Content(role="user", parts=parts))
 
@@ -247,13 +283,14 @@ async def generate(
         LAST_DEBUG[channel_id] = user_text
 
     try:
+        model_name = get_model_name()
         config = types.GenerateContentConfig(
-            system_instruction=current_persona if apply_persona else None,
+            system_instruction=persona if apply_persona else None,
             max_output_tokens=1024,
         )
         response = await asyncio.to_thread(
             client.models.generate_content,
-            model=MODEL_NAME,
+            model=model_name,
             contents=contents,
             config=config,
         )
@@ -268,10 +305,27 @@ async def generate(
             return build_response("I can't respond to that.")
 
         if channel_id is not None:
-            push_memory(channel_id, "user", user_text, display_text,
-                        client=client, model_name=MODEL_NAME)
-            push_memory(channel_id, "model", text, f"{BOT_NAME}: {text}",
-                        client=client, model_name=MODEL_NAME)
+            # Use display_text (username-prefixed) as the model-facing text so Gemini
+            # can distinguish between speakers in a multi-user channel. display_text is
+            # already formatted as "Username: <prompt>" in generate(). For model turns
+            # we keep the same convention with BOT_NAME as the speaker prefix.
+            push_memory(channel_id, "user", display_text, display_text,
+                        client=client, model_name=model_name, username=username)
+            push_memory(channel_id, "model", f"{BOT_NAME}: {text}", f"{BOT_NAME}: {text}",
+                        client=client, model_name=model_name, username=BOT_NAME)
+
+        # Fire fact extraction async — never blocks response
+        if guild_id and user_id and message_id and channel_id and prompt.strip():
+            asyncio.create_task(extract_and_store_fact(
+                message_content=prompt,
+                display_name=username,
+                guild_id=guild_id,
+                user_id=user_id,
+                message_id=message_id,
+                channel_id=channel_id,
+                client=client,
+                model_name=model_name,
+            ))
 
         return build_response(text)
 
@@ -287,10 +341,22 @@ async def safe_generate(
     prompt: str,
     *,
     current_persona: str,
+    attachments: Optional[list[tuple[bytes, str]]] = None,
+    guild_id: Optional[int] = None,
+    user_id: Optional[int] = None,
+    message_id: Optional[int] = None,
     **kwargs,
 ) -> ConversationResponse:
     try:
-        return await generate(prompt, current_persona=current_persona, **kwargs)
+        return await generate(
+            prompt,
+            current_persona=current_persona,
+            attachments=attachments,
+            guild_id=guild_id,
+            user_id=user_id,
+            message_id=message_id,
+            **kwargs,
+        )
     except GenerationError as e:
         msg = _user_facing_error(e)
         logger.warning(f"safe_generate swallowed error: {type(e).__name__}")

@@ -7,16 +7,17 @@ import os
 import logging
 import asyncio
 import uvicorn
-import json
 from fastapi_server import app
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
+from utils.config import load_config, save_config
+from utils.modules import CORE_EXTENSIONS, OPTIONAL_MODULES, load_enabled_modules
+
 # --- Configuration & Persistence Setup ---
 bot_token = os.getenv("BOT_TOKEN")
 channel_id_str = os.getenv("CHANNEL_ID")
-CONFIG_PATH = os.getenv("CONFIG_FILE_PATH", "config.json")
 
 if not bot_token or not channel_id_str:
     raise ValueError("Missing BOT_TOKEN or CHANNEL_ID in environment variables")
@@ -28,14 +29,7 @@ except ValueError:
 
 def get_prefix(bot, message):
     """Reads the prefix from the persistent JSON file."""
-    try:
-        if os.path.exists(CONFIG_PATH):
-            with open(CONFIG_PATH, "r") as f:
-                data = json.load(f)
-                return data.get("prefix", "~")
-    except (FileNotFoundError, json.JSONDecodeError):
-        pass
-    return "~"
+    return load_config().get("prefix", "~")
 
 # --- Bot Class Definition ---
 class Freesona(commands.Bot):
@@ -44,13 +38,18 @@ class Freesona(commands.Bot):
         self._legacy_notice_sent = False  # guard: only DM once per session
 
     async def setup_hook(self):
-        extensions = [
-            "cogs.ytdlp", "cogs.hello", "cogs.help",
-            "cogs.utils", "cogs.genai", "cogs.wolfram", "cogs.status",
-            "cogs.mvsep",
+        config = load_config()
+        enabled_modules = load_enabled_modules(config)
+        extensions = CORE_EXTENSIONS + [
+            ext for name, ext in OPTIONAL_MODULES.items()
+            if enabled_modules.get(name, True)
         ]
+
         for ext in extensions:
-            await self.load_extension(ext)
+            try:
+                await self.load_extension(ext)
+            except Exception as e:
+                logger.error(f"Failed to load extension {ext}: {e}")
 
         await self.tree.sync()
         print(f"Synced slash commands for {self.user}")
@@ -93,8 +92,9 @@ logger = logging.getLogger(__name__)
 @commands.has_permissions(administrator=True)
 async def change_prefix(ctx, new_prefix: str):
     try:
-        with open(CONFIG_PATH, "w") as f:
-            json.dump({"prefix": new_prefix}, f)
+        config = load_config()
+        config["prefix"] = new_prefix
+        save_config(config)
         await ctx.send(f"Prefix updated to: `{new_prefix}`")
     except Exception as e:
         logger.error(f"Failed to save prefix: {e}")

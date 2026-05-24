@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+set -eu
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+case "$branch" in
+  dev|codex/*)
+    ./scripts/check.sh
+    ;;
+  *)
+    echo "Skipping project checks on branch: $branch"
+    ;;
+esac

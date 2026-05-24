@@ -1,16 +1,15 @@
 # cogs/genai.py: GenAI cog — wiring only. Logic lives in utils/. Well, the main point of this bot in general.
-# You may disable the cog at line 49 at main.py, though you will lose access to all AI features and commands.
+# You may disable this module with /module disable genai, though you will lose access to all AI features and commands.
 # This cog is also responsible for the on_message event that triggers AI responses, so disabling it will also stop the bot from responding to messages in channels.
 # Wolfram Alpha functionality is not affected by this and will still work if you disable this cog.
  
-# This is a rewrite with the assistance of Claude, to clean up the +1000 lines of the previous GenAI cog and split responsibilities more clearly.
+# This is a rewrite with the assistance of AI, to clean up the +1000 lines of the previous GenAI cog and split responsibilities more clearly.
 # The goal is to have this cog only handle Discord events and commands, while all the AI logic, persona management, memory, and config handling lives in utils/.
 # This should make the codebase easier to maintain and reason about, and allow for better separation of concerns.
 # The new structure also makes it easier to add features like autonomy mode, persona profiles, and web search without cluttering the main cog file.
 
 import asyncio
 import logging
-import random
 import time
 import urllib.parse
 from typing import Optional
@@ -21,12 +20,16 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import os
 
-from utils.config import load_config, save_config, embed_footer, LAST_DEBUG
+from utils.config import load_config, save_config, embed_footer, LAST_DEBUG, get_model_name
 from utils.generation import (
-    safe_generate, send_response, extract_image,
+    safe_generate, send_response, extract_attachments,
     ConversationResponse, build_response,
 )
-from utils.memory import channel_memory, channel_summary
+from utils.memory import (
+    channel_memory, channel_summary,
+    list_user_facts, clear_user_memory_async,
+)
+from utils.intent import evaluate_intent, FREQUENCY_THRESHOLD, INTENT_IGNORE
 from utils.persona import (
     PERSONA_DATA, CURRENT_PERSONA, PERSONA_LOCKED, LEGACY_DETECTED,
     SetPersonaGroup,
@@ -37,17 +40,37 @@ from utils.persona import (
 load_dotenv()
 
 BOT_NAME  = os.getenv("BOT_NAME", "Bot")
-MODEL_NAME = "gemini-flash-lite-latest"
 
 logger = logging.getLogger("FreesonaBot")
 
 # Debounce + autonomy state
 DEBOUNCE_SECONDS          = 1.2
-FREQUENCY_CHANCE          = {"low": 0.04, "default": 0.10, "high": 0.20}
-AUTONOMY_COOLDOWN_SECONDS = 120
+AUTONOMY_COOLDOWN_SECONDS = 120   # per channel, seconds
+AUTONOMY_USER_COOLDOWN    = 60    # per user, seconds — bot won't re-engage same user too soon
 
 _pending_responses: dict[int, asyncio.Task] = {}
-_autonomy_cooldown: dict[int, float]        = {}
+_autonomy_cooldown: dict[int, float]        = {}  # channel_id -> last fire
+_autonomy_user_cooldown: dict[int, float]   = {}  # user_id -> last fire
+
+CHAT_RESPONSE_MODES = {"all", "mentions", "smart"}
+
+
+def should_respond_in_chat_channel(message: discord.Message, bot_user: discord.ClientUser | None, mode: str) -> bool:
+    if mode == "all":
+        return True
+
+    is_mention = bot_user is not None and bot_user in message.mentions
+    is_reply = (
+        bot_user is not None
+        and message.reference is not None
+        and getattr(message.reference.resolved, "author", None) == bot_user
+    )
+
+    if mode == "mentions":
+        return is_mention or is_reply
+    if mode == "smart":
+        return is_mention or is_reply or bool(message.attachments)
+    return True
 
 
 class GenAICog(commands.Cog):
@@ -87,61 +110,98 @@ class GenAICog(commands.Cog):
         if ctx.valid:
             return
 
-        # Autonomy check
         config = load_config()
-        autonomy_on = config.get("autonomy", False)
 
-        if autonomy_on and not message.author.bot and message.content.strip():
-            frequency  = config.get("autonomy_frequency", "default")
-            chance     = FREQUENCY_CHANCE.get(frequency, 0.10)
-            now        = time.time()
-            last_fire  = _autonomy_cooldown.get(message.channel.id, 0)
-
-            if now - last_fire > AUTONOMY_COOLDOWN_SECONDS and random.random() < chance:
-                _autonomy_cooldown[message.channel.id] = now
-                logger.info(f"Autonomy firing in channel {message.channel.id}")
-                image_bytes, image_mime = await extract_image(message)
-                response = await safe_generate(
-                    message.content,
-                    current_persona=CURRENT_PERSONA,
-                    channel_id=message.channel.id,
-                    username=message.author.display_name,
-                    image_bytes=image_bytes,
-                    image_mime=image_mime,
-                )
-                await send_response(response, message.channel)
+        # -------------------------------------------------------------------
+        # Conversation channel — bot responds to ALL messages here
+        # -------------------------------------------------------------------
+        chat_channel_id = config.get("chat_channel_id")
+        if chat_channel_id and message.channel.id == chat_channel_id:
+            response_mode = config.get("conversation_response_mode", "all")
+            if not should_respond_in_chat_channel(message, self.bot.user, response_mode):
                 return
 
-        # Debounce
-        user_id           = message.author.id
-        content_snapshot  = message.content
-        channel_snapshot  = message.channel
-        username_snapshot = message.author.display_name
-        message_snapshot  = message
+            user_id           = message.author.id
+            channel_snapshot  = message.channel
+            username_snapshot = message.author.display_name
+            message_snapshot  = message
+            guild_id_snapshot = message.guild.id  # guild is non-None; already checked above
 
-        if user_id in _pending_responses:
-            _pending_responses[user_id].cancel()
-            logger.debug(f"Debounce: cancelled pending task for user {user_id}")
+            # Prepend the message being replied to so the bot has full reply chain context
+            reply_context = ""
+            if message.reference and isinstance(message.reference.resolved, discord.Message):
+                ref = message.reference.resolved
+                if ref.content:
+                    reply_context = f"[replying to {ref.author.display_name}: {ref.content}]\n"
 
-        async def debounced_respond():
-            try:
-                await asyncio.sleep(DEBOUNCE_SECONDS)
-                image_bytes, image_mime = await extract_image(message_snapshot)
-                response = await safe_generate(
-                    content_snapshot or "What's in this image?",
-                    current_persona=CURRENT_PERSONA,
-                    channel_id=channel_snapshot.id,
-                    username=username_snapshot,
-                    image_bytes=image_bytes,
-                    image_mime=image_mime,
-                )
-                await send_response(response, channel_snapshot, reply_to=message_snapshot)
-            except asyncio.CancelledError:
-                logger.debug(f"Debounce: task cancelled for user {user_id}")
-            finally:
-                _pending_responses.pop(user_id, None)
+            content_snapshot = reply_context + message.content
 
-        _pending_responses[user_id] = asyncio.create_task(debounced_respond())
+            if user_id in _pending_responses:
+                _pending_responses[user_id].cancel()
+                logger.debug(f"Debounce: cancelled pending task for user {user_id}")
+
+            async def debounced_respond():
+                try:
+                    await asyncio.sleep(DEBOUNCE_SECONDS)
+                    attachments = await extract_attachments(message_snapshot)
+                    response = await safe_generate(
+                        content_snapshot or "What's in this image?",
+                        current_persona=CURRENT_PERSONA,
+                        channel_id=channel_snapshot.id,
+                        guild_id=guild_id_snapshot,
+                        user_id=user_id,
+                        message_id=message_snapshot.id,
+                        username=username_snapshot,
+                        attachments=attachments,
+                    )
+                    await send_response(response, channel_snapshot, reply_to=message_snapshot)
+                except asyncio.CancelledError:
+                    logger.debug(f"Debounce: task cancelled for user {user_id}")
+                finally:
+                    _pending_responses.pop(user_id, None)
+
+            _pending_responses[user_id] = asyncio.create_task(debounced_respond())
+            return
+
+        # -------------------------------------------------------------------
+        # Autonomy — bot chimes in on other channels unprompted
+        # -------------------------------------------------------------------
+        autonomy_on = config.get("autonomy", False)
+
+        if autonomy_on and not message.author.bot:
+            frequency    = config.get("autonomy_frequency", "default")
+            threshold    = FREQUENCY_THRESHOLD.get(frequency, 0.50)
+            now          = time.time()
+            last_channel = _autonomy_cooldown.get(message.channel.id, 0)
+            last_user    = _autonomy_user_cooldown.get(message.author.id, 0)
+
+            channel_ready = now - last_channel > AUTONOMY_COOLDOWN_SECONDS
+            user_ready    = now - last_user    > AUTONOMY_USER_COOLDOWN
+
+            if channel_ready and user_ready:
+                has_memory = message.channel.id in channel_memory
+                intent     = evaluate_intent(message, self.bot.user, has_memory)
+
+                if intent.intent != INTENT_IGNORE and intent.confidence >= threshold:
+                    _autonomy_cooldown[message.channel.id]    = now
+                    _autonomy_user_cooldown[message.author.id] = now
+                    logger.info(
+                        f"Autonomy firing | channel={message.channel.id} "
+                        f"confidence={intent.confidence:.2f} intent={intent.intent} "
+                        f"targets={intent.targets}"
+                    )
+                    attachments = await extract_attachments(message)
+                    response = await safe_generate(
+                        message.content,
+                        current_persona=CURRENT_PERSONA,
+                        channel_id=message.channel.id,
+                        guild_id=message.guild.id,
+                        user_id=message.author.id,
+                        message_id=message.id,
+                        username=message.author.display_name,
+                        attachments=attachments,
+                    )
+                    await send_response(response, message.channel)
 
     # -------------------------------------------------------------------
     # ~write
@@ -152,7 +212,7 @@ class GenAICog(commands.Cog):
             await ctx.send("AI commands are not available in DMs.")
             return
         await ctx.defer()
-        image_bytes, image_mime = await extract_image(ctx.message)
+        attachments = await extract_attachments(ctx.message)
         response = await safe_generate(
             query,
             current_persona=CURRENT_PERSONA,
@@ -163,8 +223,7 @@ class GenAICog(commands.Cog):
                 "Each idea must be separated clearly."
             ),
             apply_persona=True,
-            image_bytes=image_bytes,
-            image_mime=image_mime,
+            attachments=attachments,
         )
         embed = discord.Embed(
             title=f"{BOT_NAME} says...",
@@ -182,7 +241,7 @@ class GenAICog(commands.Cog):
         if ctx.guild is None:
             await ctx.send("AI commands are not available in DMs.")
             return
-        image_bytes, image_mime = await extract_image(ctx.message)
+        attachments = await extract_attachments(ctx.message)
         response = await safe_generate(
             query,
             current_persona=CURRENT_PERSONA,
@@ -192,8 +251,7 @@ class GenAICog(commands.Cog):
                 "Do NOT use markdown headings like ###."
             ),
             username=ctx.author.display_name,
-            image_bytes=image_bytes,
-            image_mime=image_mime,
+            attachments=attachments,
         )
         embed = discord.Embed(
             title=f"{BOT_NAME} answers...",
@@ -339,11 +397,13 @@ class GenAICog(commands.Cog):
         config = load_config()
         autonomy_status = "On" if config.get("autonomy", False) else "Off"
         autonomy_freq   = config.get("autonomy_frequency", "default")
+        response_mode   = config.get("conversation_response_mode", "all")
         embed = discord.Embed(title="Persona Debug", color=discord.Color.yellow())
         embed.add_field(name="Locked",      value=locked,  inline=True)
-        embed.add_field(name="Model",       value=MODEL_NAME, inline=True)
+        embed.add_field(name="Model",       value=get_model_name(), inline=True)
         embed.add_field(name="Legacy Mode", value=legacy,  inline=True)
         embed.add_field(name="Autonomy",    value=f"{autonomy_status} ({autonomy_freq})", inline=True)
+        embed.add_field(name="Chat Mode",   value=response_mode, inline=True)
         embed.add_field(name="Assembled Persona",          value=f"```{p.CURRENT_PERSONA[:900]}```", inline=False)
         embed.add_field(name="Last Prompt (this channel)", value=f"```{last[:900]}```",              inline=False)
         await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
@@ -357,6 +417,69 @@ class GenAICog(commands.Cog):
         channel_memory.pop(ctx.channel.id, None)
         channel_summary.pop(ctx.channel.id, None)
         await ctx.send("Memory cleared for this channel.")
+
+    # -------------------------------------------------------------------
+    # /memorylist + /memoryclear
+    # -------------------------------------------------------------------
+    @commands.hybrid_command(name='memorylist', help='List long-term memory facts for a user (Admin only).')
+    @commands.has_permissions(administrator=True)
+    async def memory_list(self, ctx, user: discord.User):
+        if ctx.guild is None:
+            await ctx.send("Memory commands are server-only.")
+            return
+
+        facts = list_user_facts(ctx.guild.id, user.id)
+        if not facts:
+            await ctx.send(f"No long-term memory facts stored for {user.mention}.", ephemeral=True if ctx.interaction else False)
+            return
+
+        lines = []
+        for idx, fact in enumerate(facts, start=1):
+            lines.append(f"{idx}. [{fact.importance:.2f}] {fact.content}")
+
+        embed = discord.Embed(
+            title=f"Memory: {getattr(user, 'display_name', user.name)}",
+            description="\n".join(lines)[:4096],
+            color=discord.Color.purple(),
+        )
+        await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
+
+    @commands.hybrid_command(name='memoryclear', help='Clear long-term memory facts for a user (Admin only).')
+    @commands.has_permissions(administrator=True)
+    async def memory_clear_user(self, ctx, user: discord.User):
+        if ctx.guild is None:
+            await ctx.send("Memory commands are server-only.")
+            return
+
+        removed = await clear_user_memory_async(ctx.guild.id, user.id)
+        if removed:
+            await ctx.send(f"Cleared long-term memory for {user.mention}.", ephemeral=True if ctx.interaction else False)
+        else:
+            await ctx.send(f"No long-term memory facts stored for {user.mention}.", ephemeral=True if ctx.interaction else False)
+
+    # -------------------------------------------------------------------
+    # /chatmode
+    # -------------------------------------------------------------------
+    @commands.hybrid_command(name='chatmode', help='Set conversation channel response mode (Admin only).')
+    @commands.has_permissions(administrator=True)
+    async def chat_mode(self, ctx, mode: str):
+        mode = mode.lower().strip()
+        if mode not in CHAT_RESPONSE_MODES:
+            await ctx.send("Mode must be `all`, `mentions`, or `smart`.", ephemeral=True if ctx.interaction else False)
+            return
+
+        config = load_config()
+        config["conversation_response_mode"] = mode
+        save_config(config)
+        descriptions = {
+            "all": "respond to every message in the conversation channel",
+            "mentions": "respond only to bot mentions or replies",
+            "smart": "respond to bot mentions, replies, or attachments",
+        }
+        await ctx.send(
+            f"Conversation response mode set to `{mode}`: {descriptions[mode]}.",
+            ephemeral=True if ctx.interaction else False,
+        )
 
     # -------------------------------------------------------------------
     # /autonomy
