@@ -28,6 +28,8 @@ class FeedItem:
     link:      str
     published: str = ""
     summary:   str = ""
+    author:    str = ""
+    image_url: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -168,10 +170,37 @@ def parse_feed(xml_text: str, limit: int = 5) -> list[FeedItem]:
         link      = child_text(node, ("link",)) or child_attr(node, "link", "href")
         published = child_text(node, ("pubdate", "published", "updated"))
         summary   = child_text(node, ("description", "summary", "content"))
+        author    = child_text(node, ("creator", "author"))
+        
+        # Look for images inside media:content or enclosures
+        image_url = ""
+        max_width = 0
+        for child in list(node):
+            tag = child.tag.rsplit("}", 1)[-1].lower()
+            
+            # Extract from media:content, picking the largest image width
+            if tag == "content" and "url" in child.attrib:
+                url = child.attrib["url"].strip()
+                try:
+                    width = int(child.attrib.get("width", 0))
+                except ValueError:
+                    width = 0
+                if width >= max_width:
+                    max_width = width
+                    image_url = url
+                    
+            # Fallback to standard RSS enclosure if no media image is set yet
+            elif tag == "enclosure" and "url" in child.attrib:
+                type_attr = child.attrib.get("type", "")
+                if not image_url or "image" in type_attr:
+                    image_url = child.attrib["url"].strip()
+
         items.append(FeedItem(
             title=strip_html(title),
             link=link,
             published=normalize_date(published),
             summary=strip_html(summary),
+            author=strip_html(author),
+            image_url=image_url,
         ))
     return items
