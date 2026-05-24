@@ -2,8 +2,6 @@
 
 ![Freesona Banner](assets/b_freesona-01.png)
 
-[Discord Support](https://discord.gg/vXPRs2cHSE)
-
 Most AI Discord bots give you a product. Verba, MEE6, and every other hosted platform give you a personality someone else built, running on infrastructure you don't control, with a ceiling you'll eventually hit.
 
 Freesona is different. It's a free, open alternative to hosted persona bots — with no ceiling. Fork it, drop in your API key, and get a self-hosted bot that can be a convincing AI character, a focused server utility, or both.
