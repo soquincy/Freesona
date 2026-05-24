@@ -65,6 +65,8 @@ class ConversationResponse:
     def first_text(self) -> str:
         # Return raw_text if available, otherwise fallback to joining segments
         return self.raw_text if self.raw_text else "\n\n".join(s.text for s in self.segments)
+        # Join segments with double newlines to keep paragraph formatting
+        return "\n\n".join(s.text for s in self.segments if s.text.strip())
 
 # ---------------------------------------------------------------------------
 # Error classes

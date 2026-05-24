@@ -278,6 +278,8 @@ class GenAICog(commands.Cog):
         from utils.search import web_search
         
         results = await web_search(query)
+        
+        results = await web_search(query)
         response = await safe_generate(
             f"Summarize these search results:\n\n{results}",
             current_persona=CURRENT_PERSONA,
