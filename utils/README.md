@@ -1,6 +1,6 @@
 # utils/
 
-Logic modules for Freesona. The cog (`cogs/genai.py`) handles Discord events and commands only — all AI logic, memory, persona management, and config live here.
+Logic modules for Freesona. This currently includes utilities for `cogs/genai.py` and `cogs/news.py`.
 
 | Module | Responsibility |
 | :--- | :--- |
@@ -9,5 +9,6 @@ Logic modules for Freesona. The cog (`cogs/genai.py`) handles Discord events and
 | `persona.py` | Persona data layer, modals, `/setpersona` command group |
 | `intent.py` | Intent evaluator for autonomy — confidence scoring, signal detection, threshold mapping |
 | `security.py` | Injection detection, output sanitization |
-| `search.py` | Google Custom Search integration |
+| `search.py` | Google Custom Search integration (to be depricated soon) |
 | `config.py` | Config I/O (`config.json`), embed footer helper |
+| `rss.py` | RSS Feed parsing for feeds |
