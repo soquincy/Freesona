@@ -18,6 +18,7 @@ Default prefix is `~`. Change it with `~prefix <symbol>`. All commands work as b
 | `/setchannel #channel` | Set the AI conversation channel | Administrator |
 | `/clearchannel` | Remove the conversation channel | Administrator |
 | `/clearmemory` | Wipe short-term channel memory and summary | Administrator |
+| `/chatmode <all/mentions/smart>` | Set when the bot replies in the conversation channel | Administrator |
 
 The bot responds to all messages in the conversation channel. It keeps the last 5 messages as context and summarizes older history automatically. Every message is tagged with the sender's display name so the bot can tell users apart.
 
@@ -34,6 +35,20 @@ The bot responds to all messages in the conversation channel. It keeps the last 
 | `/personalist` | List all saved presets | Bot Owner |
 | `/personadelete <name>` | Delete a saved preset | Bot Owner |
 | `/debugpersona` | Show active persona, last prompt, model, lock state, autonomy | Bot Owner |
+| `/memorylist <user>` | List long-term memory facts for a user | Administrator |
+| `/memoryclear <user>` | Clear long-term memory facts for a user | Administrator |
+
+## Runtime Controls
+
+| Command | Action | Permissions |
+| :--- | :--- | :--- |
+| `/module list` | List enabled/disabled modules | Administrator |
+| `/module enable <name>` | Enable and load a module | Administrator |
+| `/module disable <name>` | Disable and unload a module | Administrator |
+| `/module reload <name>` | Reload an enabled module | Administrator |
+| `/model show` | Show the active Gemini model | Bot Owner |
+| `/model set <name>` | Set the active Gemini model | Bot Owner |
+| `/model reset` | Reset to the environment/default model | Bot Owner |
 
 ## Autonomy
 

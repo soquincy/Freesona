@@ -65,8 +65,10 @@ def check_config_round_trip() -> None:
             "prefix": "!",
             "chat_channel_id": 123,
             "autonomy": True,
+            "model_name": "test-model",
         })
         loaded = config.load_config()
+        model_name = config.get_model_name()
     finally:
         if old_path is None:
             os.environ.pop("CONFIG_FILE_PATH", None)
@@ -78,6 +80,7 @@ def check_config_round_trip() -> None:
     assert loaded["prefix"] == "!"
     assert loaded["chat_channel_id"] == 123
     assert loaded["autonomy"] is True
+    assert model_name == "test-model"
 
 
 def check_public_url_guard() -> None:
@@ -125,6 +128,22 @@ def check_mvsep_url_routing() -> None:
     assert not should_ytdlp("https://cdn.example.com/file.mp3")
 
 
+def check_module_registry() -> None:
+    modules = reload_local_module("utils.modules")
+    enabled = modules.load_enabled_modules({
+        "enabled_modules": {
+            "genai": False,
+            "mvsep": True,
+            "unknown": False,
+        }
+    })
+    assert enabled["genai"] is False
+    assert enabled["mvsep"] is True
+    assert "unknown" not in enabled
+    assert modules.module_extension("GENAI") == "cogs.genai"
+    assert modules.module_extension("missing") is None
+
+
 def check_json_files() -> None:
     for rel in ("config.json",):
         path = ROOT / rel
@@ -152,6 +171,7 @@ def check_env_sample() -> None:
         "BOT_TOKEN",
         "CHANNEL_ID",
         "GOOGLE_API_KEY",
+        "MODEL_NAME",
         "CONFIG_FILE_PATH",
         "MEMORY_FILE_PATH",
     }
@@ -163,7 +183,12 @@ def check_env_sample() -> None:
 def check_secret_files_not_tracked() -> None:
     try:
         result = subprocess.run(
-            ["git", "ls-files", ".env", "persona.txt", "memory.json", "persona.json", "personas.json"],
+            [
+                "git", "ls-files",
+                ".env",
+                "persona.txt", "persona.json", "personas.json",
+                "memory.json", "kb.json",
+            ],
             cwd=ROOT,
             text=True,
             capture_output=True,
@@ -189,6 +214,7 @@ def main() -> int:
         ("config round trip", check_config_round_trip),
         ("public URL guard", check_public_url_guard),
         ("MVSEP URL routing", check_mvsep_url_routing),
+        ("module registry", check_module_registry),
         ("JSON files", check_json_files),
         (".env.sample", check_env_sample),
         ("tracked secrets", check_secret_files_not_tracked),

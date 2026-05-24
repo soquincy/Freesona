@@ -1,9 +1,9 @@
 # cogs/genai.py: GenAI cog — wiring only. Logic lives in utils/. Well, the main point of this bot in general.
-# You may disable the cog at line 49 at main.py, though you will lose access to all AI features and commands.
+# You may disable this module with /module disable genai, though you will lose access to all AI features and commands.
 # This cog is also responsible for the on_message event that triggers AI responses, so disabling it will also stop the bot from responding to messages in channels.
 # Wolfram Alpha functionality is not affected by this and will still work if you disable this cog.
  
-# This is a rewrite with the assistance of Claude, to clean up the +1000 lines of the previous GenAI cog and split responsibilities more clearly.
+# This is a rewrite with the assistance of AI, to clean up the +1000 lines of the previous GenAI cog and split responsibilities more clearly.
 # The goal is to have this cog only handle Discord events and commands, while all the AI logic, persona management, memory, and config handling lives in utils/.
 # This should make the codebase easier to maintain and reason about, and allow for better separation of concerns.
 # The new structure also makes it easier to add features like autonomy mode, persona profiles, and web search without cluttering the main cog file.
@@ -20,12 +20,15 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import os
 
-from utils.config import load_config, save_config, embed_footer, LAST_DEBUG
+from utils.config import load_config, save_config, embed_footer, LAST_DEBUG, get_model_name
 from utils.generation import (
     safe_generate, send_response, extract_attachments,
     ConversationResponse, build_response,
 )
-from utils.memory import channel_memory, channel_summary
+from utils.memory import (
+    channel_memory, channel_summary,
+    list_user_facts, clear_user_memory_async,
+)
 from utils.intent import evaluate_intent, FREQUENCY_THRESHOLD, INTENT_IGNORE
 from utils.persona import (
     PERSONA_DATA, CURRENT_PERSONA, PERSONA_LOCKED, LEGACY_DETECTED,
@@ -37,7 +40,6 @@ from utils.persona import (
 load_dotenv()
 
 BOT_NAME  = os.getenv("BOT_NAME", "Bot")
-MODEL_NAME = "gemini-flash-lite-latest"
 
 logger = logging.getLogger("FreesonaBot")
 
@@ -49,6 +51,26 @@ AUTONOMY_USER_COOLDOWN    = 60    # per user, seconds — bot won't re-engage sa
 _pending_responses: dict[int, asyncio.Task] = {}
 _autonomy_cooldown: dict[int, float]        = {}  # channel_id -> last fire
 _autonomy_user_cooldown: dict[int, float]   = {}  # user_id -> last fire
+
+CHAT_RESPONSE_MODES = {"all", "mentions", "smart"}
+
+
+def should_respond_in_chat_channel(message: discord.Message, bot_user: discord.ClientUser | None, mode: str) -> bool:
+    if mode == "all":
+        return True
+
+    is_mention = bot_user is not None and bot_user in message.mentions
+    is_reply = (
+        bot_user is not None
+        and message.reference is not None
+        and getattr(message.reference.resolved, "author", None) == bot_user
+    )
+
+    if mode == "mentions":
+        return is_mention or is_reply
+    if mode == "smart":
+        return is_mention or is_reply or bool(message.attachments)
+    return True
 
 
 class GenAICog(commands.Cog):
@@ -95,6 +117,10 @@ class GenAICog(commands.Cog):
         # -------------------------------------------------------------------
         chat_channel_id = config.get("chat_channel_id")
         if chat_channel_id and message.channel.id == chat_channel_id:
+            response_mode = config.get("conversation_response_mode", "all")
+            if not should_respond_in_chat_channel(message, self.bot.user, response_mode):
+                return
+
             user_id           = message.author.id
             channel_snapshot  = message.channel
             username_snapshot = message.author.display_name
@@ -371,11 +397,13 @@ class GenAICog(commands.Cog):
         config = load_config()
         autonomy_status = "On" if config.get("autonomy", False) else "Off"
         autonomy_freq   = config.get("autonomy_frequency", "default")
+        response_mode   = config.get("conversation_response_mode", "all")
         embed = discord.Embed(title="Persona Debug", color=discord.Color.yellow())
         embed.add_field(name="Locked",      value=locked,  inline=True)
-        embed.add_field(name="Model",       value=MODEL_NAME, inline=True)
+        embed.add_field(name="Model",       value=get_model_name(), inline=True)
         embed.add_field(name="Legacy Mode", value=legacy,  inline=True)
         embed.add_field(name="Autonomy",    value=f"{autonomy_status} ({autonomy_freq})", inline=True)
+        embed.add_field(name="Chat Mode",   value=response_mode, inline=True)
         embed.add_field(name="Assembled Persona",          value=f"```{p.CURRENT_PERSONA[:900]}```", inline=False)
         embed.add_field(name="Last Prompt (this channel)", value=f"```{last[:900]}```",              inline=False)
         await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
@@ -389,6 +417,69 @@ class GenAICog(commands.Cog):
         channel_memory.pop(ctx.channel.id, None)
         channel_summary.pop(ctx.channel.id, None)
         await ctx.send("Memory cleared for this channel.")
+
+    # -------------------------------------------------------------------
+    # /memorylist + /memoryclear
+    # -------------------------------------------------------------------
+    @commands.hybrid_command(name='memorylist', help='List long-term memory facts for a user (Admin only).')
+    @commands.has_permissions(administrator=True)
+    async def memory_list(self, ctx, user: discord.User):
+        if ctx.guild is None:
+            await ctx.send("Memory commands are server-only.")
+            return
+
+        facts = list_user_facts(ctx.guild.id, user.id)
+        if not facts:
+            await ctx.send(f"No long-term memory facts stored for {user.mention}.", ephemeral=True if ctx.interaction else False)
+            return
+
+        lines = []
+        for idx, fact in enumerate(facts, start=1):
+            lines.append(f"{idx}. [{fact.importance:.2f}] {fact.content}")
+
+        embed = discord.Embed(
+            title=f"Memory: {getattr(user, 'display_name', user.name)}",
+            description="\n".join(lines)[:4096],
+            color=discord.Color.purple(),
+        )
+        await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
+
+    @commands.hybrid_command(name='memoryclear', help='Clear long-term memory facts for a user (Admin only).')
+    @commands.has_permissions(administrator=True)
+    async def memory_clear_user(self, ctx, user: discord.User):
+        if ctx.guild is None:
+            await ctx.send("Memory commands are server-only.")
+            return
+
+        removed = await clear_user_memory_async(ctx.guild.id, user.id)
+        if removed:
+            await ctx.send(f"Cleared long-term memory for {user.mention}.", ephemeral=True if ctx.interaction else False)
+        else:
+            await ctx.send(f"No long-term memory facts stored for {user.mention}.", ephemeral=True if ctx.interaction else False)
+
+    # -------------------------------------------------------------------
+    # /chatmode
+    # -------------------------------------------------------------------
+    @commands.hybrid_command(name='chatmode', help='Set conversation channel response mode (Admin only).')
+    @commands.has_permissions(administrator=True)
+    async def chat_mode(self, ctx, mode: str):
+        mode = mode.lower().strip()
+        if mode not in CHAT_RESPONSE_MODES:
+            await ctx.send("Mode must be `all`, `mentions`, or `smart`.", ephemeral=True if ctx.interaction else False)
+            return
+
+        config = load_config()
+        config["conversation_response_mode"] = mode
+        save_config(config)
+        descriptions = {
+            "all": "respond to every message in the conversation channel",
+            "mentions": "respond only to bot mentions or replies",
+            "smart": "respond to bot mentions, replies, or attachments",
+        }
+        await ctx.send(
+            f"Conversation response mode set to `{mode}`: {descriptions[mode]}.",
+            ephemeral=True if ctx.interaction else False,
+        )
 
     # -------------------------------------------------------------------
     # /autonomy

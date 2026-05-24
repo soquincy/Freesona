@@ -64,6 +64,7 @@ Create a `.env` file:
 BOT_TOKEN=YOUR_DISCORD_BOT_TOKEN
 CHANNEL_ID=YOUR_LOG_CHANNEL_ID
 GOOGLE_API_KEY=YOUR_GEMINI_API_KEY
+MODEL_NAME=gemini-flash-lite-latest
 GOOGLE_SEARCH_API_KEY=YOUR_GOOGLE_SEARCH_API_KEY
 SEARCH_ENGINE_ID=YOUR_GOOGLE_SEARCH_ENGINE_ID
 WOLFRAM_APPID_SHORT=YOUR_WOLFRAM_APPID_SHORT
@@ -109,6 +110,29 @@ Short-term conversation memory is in-session only — cleared on restart or via 
 
 ---
 
+## Runtime Controls
+
+Admins can control optional modules without editing `main.py`:
+
+```text
+/module list
+/module enable <name>
+/module disable <name>
+/module reload <name>
+```
+
+The bot owner can switch Gemini models without restarting:
+
+```text
+/model show
+/model set <model>
+/model reset
+```
+
+Conversation channel behavior can be narrowed with `/chatmode all`, `/chatmode mentions`, or `/chatmode smart`.
+
+---
+
 ## Acknowledgements
 
 * [discord.py](https://discordpy.readthedocs.io/)
@@ -129,13 +153,12 @@ Licensed under the **MIT License**. See [LICENSE](LICENSE).
 
 ### Short-term
 
-* Per-user memory commands — `/memorylist <user>`, `/memoryclear <user>`
 * Persona gallery in the wiki
+* Per-fact memory controls — delete or edit one remembered fact without clearing the user
 
 ### Medium-term
 
-* Multi-model support — swap providers via env variable
-* Conversation channel mention/reply filtering
+* Multi-provider support — swap AI providers without changing command code
 * Message claiming system for multi-instance deployments
 
 ### Long-term

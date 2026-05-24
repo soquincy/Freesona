@@ -249,6 +249,13 @@ def load_user_memory(guild_id: int, user_id: int) -> Optional[UserMemory]:
     return None
 
 
+def list_user_facts(guild_id: int, user_id: int) -> list[UserFact]:
+    mem = load_user_memory(guild_id, user_id)
+    if mem is None:
+        return []
+    return sorted(mem.facts, key=lambda f: f.importance, reverse=True)
+
+
 async def save_user_memory_async(guild_id: int, user_id: int, memory: UserMemory):
     """Async, atomic write — safe for concurrent callers."""
     _ensure_cache_loaded()
@@ -256,6 +263,18 @@ async def save_user_memory_async(guild_id: int, user_id: int, memory: UserMemory
     async with _memory_lock:
         _memory_cache[key] = memory.to_dict()
         await _flush_cache()
+
+
+async def clear_user_memory_async(guild_id: int, user_id: int) -> bool:
+    """Delete one user's long-term memory. Returns True if anything was removed."""
+    _ensure_cache_loaded()
+    key = _make_key(guild_id, user_id)
+    async with _memory_lock:
+        existed = key in _memory_cache
+        _memory_cache.pop(key, None)
+        if existed:
+            await _flush_cache()
+        return existed
 
 
 def inject_user_memory(guild_id: int, user_id: int, display_name: str) -> str:

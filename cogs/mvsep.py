@@ -1,5 +1,5 @@
 # cogs/mvsep.py: MVSEP audio source separation (vocals/instrumental via BS Roformer)
-# YES I make mashups and I need this shut up. You may disable this cog at line 50 at main.py if you don't care about separating audio;
+# YES I make mashups and I need this shut up. You may disable this module with /module disable mvsep if you don't care about separating audio;
 # But hey it's a fun party trick and it works surprisingly well for a free API.
 
 # Current problem: no way to get progress updates or queue position; no way to cancel; links expire after some time; only one job at a time on free tier.
@@ -195,7 +195,11 @@ class MVSepCog(commands.Cog):
         if not is_public_http_url(source):
             raise RuntimeError("Please provide a public http(s) URL.")
 
-        # 2. Platform/social URL — yt-dlp download then upload to MVSEP.
+        # 2. Plain direct audio URL — pass straight to MVSEP.
+        if is_direct_audio_url(source):
+            return None, source
+
+        # 3. Platform/social URL — yt-dlp download then upload to MVSEP.
         from cogs.ytdlp import YtDlp
         ytdlp_cog = self.bot.get_cog("YtDlp")
         if ytdlp_cog is None or not isinstance(ytdlp_cog, YtDlp):
@@ -206,10 +210,6 @@ class MVSepCog(commands.Cog):
             if not local:
                 raise RuntimeError("yt-dlp failed to download audio.")
             return local, None
-
-        # 3. Plain direct audio URL — pass straight to MVSEP.
-        if is_direct_audio_url(source):
-            return None, source
 
         # 4. Any other public URL — try yt-dlp as a fallback.
         local = await ytdlp_cog.fetch_ytdlp(ctx, source, is_audio=True, tmp_dir=tmp_dir)

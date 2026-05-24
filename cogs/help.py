@@ -55,6 +55,7 @@ class HelpCog(commands.Cog):
                     'personalock', 'personaunlock', 'personasave',
                     'personaload', 'personalist', 'personadelete',
                     'debugpersona', 'setchannel', 'clearchannel', 'clearmemory',
+                    'memorylist', 'memoryclear', 'chatmode', 'model', 'module',
                 ]:
                     ai_cmds.append(f"`{cmd.name}` - {cmd.help or 'No description'}")
 

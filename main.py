@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 from utils.config import load_config, save_config
+from utils.modules import CORE_EXTENSIONS, OPTIONAL_MODULES, load_enabled_modules
 
 # --- Configuration & Persistence Setup ---
 bot_token = os.getenv("BOT_TOKEN")
@@ -37,13 +38,18 @@ class Freesona(commands.Bot):
         self._legacy_notice_sent = False  # guard: only DM once per session
 
     async def setup_hook(self):
-        extensions = [
-            "cogs.ytdlp", "cogs.hello", "cogs.help",
-            "cogs.utils", "cogs.genai", "cogs.wolfram", "cogs.status",
-            "cogs.mvsep", "cogs.ping",
+        config = load_config()
+        enabled_modules = load_enabled_modules(config)
+        extensions = CORE_EXTENSIONS + [
+            ext for name, ext in OPTIONAL_MODULES.items()
+            if enabled_modules.get(name, True)
         ]
+
         for ext in extensions:
-            await self.load_extension(ext)
+            try:
+                await self.load_extension(ext)
+            except Exception as e:
+                logger.error(f"Failed to load extension {ext}: {e}")
 
         await self.tree.sync()
         print(f"Synced slash commands for {self.user}")
