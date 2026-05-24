@@ -18,7 +18,7 @@ from utils.security import is_public_http_url
 
 logger = logging.getLogger("FreesonaBot")
 
-POLL_INTERVAL_MINUTES = 15
+POLL_INTERVAL_MINUTES = 5
 RSS_CHANNEL_KEY       = "rss_channel_id"
 
 
@@ -86,12 +86,17 @@ class NewsCog(commands.Cog):
                             url=item.link,
                             color=discord.Color.blurple(),
                         )
+                        if item.author:
+                            embed.set_author(name=item.author[:256])
                         if item.summary:
                             embed.description = item.summary[:400]
+                        if item.image_url:
+                            embed.set_image(url=item.image_url)
+
+                        footer_text = name
                         if item.published:
-                            embed.set_footer(text=f"{name}  •  {item.published}")
-                        else:
-                            embed.set_footer(text=name)
+                            footer_text += f"  •  {item.published}"
+                        embed.set_footer(text=footer_text)
 
                         try:
                             await channel.send(embed=embed)
@@ -205,21 +210,29 @@ class NewsCog(commands.Cog):
             await ctx.send(f"No items found in `{key}`.")
             return
 
-        embed = discord.Embed(title=f"Latest: {key}", url=url, color=discord.Color.blue())
+        # Discord permits sending an array of up to 10 embeds in one message.
+        # This renders images and bylines neatly for every item.
+        embeds = []
         for item in items:
-            value_parts = []
-            if item.published:
-                value_parts.append(item.published)
-            if item.summary:
-                value_parts.append(item.summary[:220])
-            if item.link:
-                value_parts.append(item.link)
-            embed.add_field(
-                name=item.title[:256],
-                value="\n".join(value_parts)[:1024] or item.link,
-                inline=False,
+            embed = discord.Embed(
+                title=item.title[:256],
+                url=item.link,
+                color=discord.Color.blue(),
             )
-        await ctx.send(embed=embed)
+            if item.author:
+                embed.set_author(name=item.author[:256])
+            if item.summary:
+                embed.description = item.summary[:400]
+            if item.image_url:
+                embed.set_image(url=item.image_url)
+
+            footer_text = key
+            if item.published:
+                footer_text += f"  •  {item.published}"
+            embed.set_footer(text=footer_text)
+            embeds.append(embed)
+
+        await ctx.send(embeds=embeds)
 
     @rss_group.command(name="add", help="Add or update an RSS feed (Admin only).")
     @commands.has_permissions(administrator=True)

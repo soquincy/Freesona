@@ -28,6 +28,8 @@ class FeedItem:
     link:      str
     published: str = ""
     summary:   str = ""
+    author:    str = ""
+    image_url: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -149,9 +151,8 @@ def normalize_date(value: str) -> str:
     except Exception:
         return value
 
-
 def parse_feed(xml_text: str, limit: int = 5) -> list[FeedItem]:
-    root     = ET.fromstring(xml_text)
+    root = ET.fromstring(xml_text)
     root_tag = root.tag.rsplit("}", 1)[-1].lower()
     if root_tag == "rss":
         channel = next(
@@ -163,15 +164,51 @@ def parse_feed(xml_text: str, limit: int = 5) -> list[FeedItem]:
         nodes = [c for c in list(root) if c.tag.rsplit("}", 1)[-1].lower() == "entry"]
 
     items: list[FeedItem] = []
-    for node in nodes[:limit]:
-        title     = child_text(node, ("title",)) or "(untitled)"
-        link      = child_text(node, ("link",)) or child_attr(node, "link", "href")
+    for node in nodes:
+        if len(items) >= limit:
+            break
+            
+        title = child_text(node, ("title",)) or "(untitled)"
+        if title.lower().startswith(("r to @", "re:")):
+            continue
+            
+        link = child_text(node, ("link",)) or child_attr(node, "link", "href")
         published = child_text(node, ("pubdate", "published", "updated"))
-        summary   = child_text(node, ("description", "summary", "content"))
+        summary = child_text(node, ("description", "summary", "content"))
+        author = child_text(node, ("creator", "author"))
+        
+        # Extract Image
+        image_url = ""
+        max_width = 0
+        
+        for child in list(node):
+            tag = child.tag.rsplit("}", 1)[-1].lower()
+            if tag in ("content", "thumbnail") and "url" in child.attrib:
+                url = child.attrib["url"].strip()
+                try:
+                    width = int(child.attrib.get("width", 0))
+                except ValueError:
+                    width = 0
+                if width >= max_width:
+                    max_width = width
+                    image_url = url
+            elif tag == "enclosure" and "url" in child.attrib:
+                type_attr = child.attrib.get("type", "")
+                if not image_url or "image" in type_attr:
+                    image_url = child.attrib["url"].strip()
+
+        if not image_url:
+            match = re.search(r'<img[^>]+src="([^">]+)"', summary)
+            if match:
+                image_url = match.group(1)
+
         items.append(FeedItem(
             title=strip_html(title),
             link=link,
             published=normalize_date(published),
             summary=strip_html(summary),
+            author=strip_html(author),
+            image_url=image_url,
         ))
+        
     return items
