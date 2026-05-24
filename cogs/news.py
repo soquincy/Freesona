@@ -18,7 +18,7 @@ from utils.security import is_public_http_url
 
 logger = logging.getLogger("FreesonaBot")
 
-POLL_INTERVAL_MINUTES = 15
+POLL_INTERVAL_MINUTES = 5
 RSS_CHANNEL_KEY       = "rss_channel_id"
 
 
