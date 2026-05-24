@@ -5,6 +5,7 @@ import re
 import asyncio
 import logging
 import time
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -61,7 +62,8 @@ class ConversationResponse:
         return not self.segments
 
     def first_text(self) -> str:
-        return " ".join(s.text for s in self.segments)
+        # Join segments with double newlines to keep paragraph formatting
+        return "\n\n".join(s.text for s in self.segments if s.text.strip())
 
 # ---------------------------------------------------------------------------
 # Error classes
@@ -120,26 +122,18 @@ async def rate_limit():
 # Text splitter + response builder
 # ---------------------------------------------------------------------------
 
-def split_into_segments(text: str) -> list[str]:
-    if len(text) < SPLIT_MIN_LENGTH:
-        return [text]
-
-    paragraphs = [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
-    if len(paragraphs) <= 1:
-        sentences = re.split(r"(?<=[.!?])\s+", text)
-        chunks: list[str] = []
-        current = ""
-        for s in sentences:
-            if len(current) + len(s) > 220 and current:
-                chunks.append(current.strip())
-                current = s
-            else:
-                current = (current + " " + s).strip() if current else s
-        if current:
-            chunks.append(current.strip())
-        return chunks if len(chunks) > 1 else [text]
-
-    return paragraphs
+def split_into_segments(text):
+    """
+    Splits text into segments while preserving paragraph breaks.
+    """
+    # Split by double newlines first to keep paragraph structure
+    paragraphs = text.split('\n\n')
+    all_segments = []
+    for para in paragraphs:
+        # Split each paragraph into sentences
+        sentences = re.split(r'(?<=[.!?])\s+', para)
+        all_segments.extend([s.strip() for s in sentences if s.strip()])
+    return all_segments
 
 
 def build_response(text: str) -> ConversationResponse:

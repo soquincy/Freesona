@@ -273,28 +273,35 @@ class GenAICog(commands.Cog):
         if ctx.guild is None:
             await ctx.send("AI commands are not available in DMs.")
             return
+            
         await ctx.defer()
         from utils.search import web_search
-        results  = await web_search(query)
+        
+        results = await web_search(query)
         response = await safe_generate(
             f"Summarize these search results:\n\n{results}",
             current_persona=CURRENT_PERSONA,
             apply_persona=False,
             instruction_prefix=(
-                "Write in clean sections with paragraph breaks. "
-                "Do not use markdown headings like ###. "
-                "Keep structure readable in Discord embeds."
+                "Use clean sections with double newlines between paragraphs. "
+                "Use **Bold Text** for headers. "
+                "Do not use markdown symbols like # or ###. "
             )
         )
-        text = response.first_text().replace("### ", "\n\n")
+        
+        # first_text() now preserves the spacing we need
+        text = response.first_text()
+        
         embed = discord.Embed(
             title=f"Search: {query}",
             description=text[:4096],
             color=discord.Color.blue()
         )
+        
         url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
         embed.add_field(name="Full results", value=url, inline=False)
         embed.set_footer(text=embed_footer(ctx.author.display_name, query))
+        
         await ctx.send(embed=embed)
 
     # -------------------------------------------------------------------
