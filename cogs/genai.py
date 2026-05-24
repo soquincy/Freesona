@@ -96,11 +96,19 @@ class GenAICog(commands.Cog):
         chat_channel_id = config.get("chat_channel_id")
         if chat_channel_id and message.channel.id == chat_channel_id:
             user_id           = message.author.id
-            content_snapshot  = message.content
             channel_snapshot  = message.channel
             username_snapshot = message.author.display_name
             message_snapshot  = message
             guild_id_snapshot = message.guild.id  # guild is non-None; already checked above
+
+            # Prepend the message being replied to so the bot has full reply chain context
+            reply_context = ""
+            if message.reference and isinstance(message.reference.resolved, discord.Message):
+                ref = message.reference.resolved
+                if ref.content:
+                    reply_context = f"[replying to {ref.author.display_name}: {ref.content}]\n"
+
+            content_snapshot = reply_context + message.content
 
             if user_id in _pending_responses:
                 _pending_responses[user_id].cancel()
