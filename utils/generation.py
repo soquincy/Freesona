@@ -5,6 +5,7 @@ import re
 import asyncio
 import logging
 import time
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -55,13 +56,15 @@ class ConversationResponse:
     segments: list[MessageSegment] = field(default_factory=list)
     reactions: list[str] = field(default_factory=list)
     suggested_gif: Optional[str] = None
+    raw_text: str = ""  # Add this field to store the original output
 
     @property
     def is_empty(self) -> bool:
         return not self.segments
 
     def first_text(self) -> str:
-        return " ".join(s.text for s in self.segments)
+        # Return raw_text if available, otherwise fallback to joining segments
+        return self.raw_text if self.raw_text else "\n\n".join(s.text for s in self.segments)
 
 # ---------------------------------------------------------------------------
 # Error classes
@@ -120,26 +123,18 @@ async def rate_limit():
 # Text splitter + response builder
 # ---------------------------------------------------------------------------
 
-def split_into_segments(text: str) -> list[str]:
-    if len(text) < SPLIT_MIN_LENGTH:
-        return [text]
-
-    paragraphs = [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
-    if len(paragraphs) <= 1:
-        sentences = re.split(r"(?<=[.!?])\s+", text)
-        chunks: list[str] = []
-        current = ""
-        for s in sentences:
-            if len(current) + len(s) > 220 and current:
-                chunks.append(current.strip())
-                current = s
-            else:
-                current = (current + " " + s).strip() if current else s
-        if current:
-            chunks.append(current.strip())
-        return chunks if len(chunks) > 1 else [text]
-
-    return paragraphs
+def split_into_segments(text):
+    """
+    Splits text into segments while preserving paragraph breaks.
+    """
+    # Split by double newlines first to keep paragraph structure
+    paragraphs = text.split('\n\n')
+    all_segments = []
+    for para in paragraphs:
+        # Split each paragraph into sentences
+        sentences = re.split(r'(?<=[.!?])\s+', para)
+        all_segments.extend([s.strip() for s in sentences if s.strip()])
+    return all_segments
 
 
 def build_response(text: str) -> ConversationResponse:
@@ -151,7 +146,8 @@ def build_response(text: str) -> ConversationResponse:
             SPLIT_DELAY_MAX
         )
         segments.append(MessageSegment(text=seg, delay=delay, typing=True))
-    return ConversationResponse(segments=segments)
+    # Pass the original text into raw_text
+    return ConversationResponse(segments=segments, raw_text=text)
 
 
 def clean_text(text: str, limit: int = 4000) -> str:
