@@ -14,10 +14,12 @@ import discord
 
 from discord.ext import commands
 from typing import Optional
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
 from pathlib import Path
+from utils.security import is_public_http_url
 
 load_dotenv()
 
@@ -36,6 +38,23 @@ POLL_TIMEOUT  = 600  # 10 minutes max
 IN_PROGRESS = {"waiting", "processing", "distributing", "merging"}
 
 DIRECT_AUDIO_EXTS = (".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac")
+YTDLP_DOMAINS = (
+    "youtube.com",
+    "youtu.be",
+    "music.youtube.com",
+    "tiktok.com",
+    "twitter.com",
+    "x.com",
+    "instagram.com",
+    "facebook.com",
+    "fb.watch",
+    "soundcloud.com",
+    "spotify.com",
+    "reddit.com",
+    "vimeo.com",
+    "bilibili.com",
+    "twitch.tv",
+)
 
 logger = logging.getLogger("FreesonaBot")
 
@@ -43,6 +62,11 @@ logger = logging.getLogger("FreesonaBot")
 def is_direct_audio_url(url: str) -> bool:
     lower = url.lower().split("?")[0]
     return any(lower.endswith(ext) for ext in DIRECT_AUDIO_EXTS)
+
+
+def should_download_with_ytdlp(url: str) -> bool:
+    host = (urlparse(url).hostname or "").lower().rstrip(".")
+    return any(host == domain or host.endswith(f".{domain}") for domain in YTDLP_DOMAINS)
 
 
 class MVSepCog(commands.Cog):
@@ -168,17 +192,26 @@ class MVSepCog(commands.Cog):
 
         if not source:
             return None, None
+        if not is_public_http_url(source):
+            raise RuntimeError("Please provide a public http(s) URL.")
 
-        # 2. Direct audio URL — pass straight to MVSEP
-        if is_direct_audio_url(source):
-            return None, source
-
-        # 3. Platform URL — yt-dlp download then upload
+        # 2. Platform/social URL — yt-dlp download then upload to MVSEP.
         from cogs.ytdlp import YtDlp
         ytdlp_cog = self.bot.get_cog("YtDlp")
         if ytdlp_cog is None or not isinstance(ytdlp_cog, YtDlp):
             raise RuntimeError("yt-dlp cog not loaded.")
 
+        if should_download_with_ytdlp(source):
+            local = await ytdlp_cog.fetch_ytdlp(ctx, source, is_audio=True, tmp_dir=tmp_dir)
+            if not local:
+                raise RuntimeError("yt-dlp failed to download audio.")
+            return local, None
+
+        # 3. Plain direct audio URL — pass straight to MVSEP.
+        if is_direct_audio_url(source):
+            return None, source
+
+        # 4. Any other public URL — try yt-dlp as a fallback.
         local = await ytdlp_cog.fetch_ytdlp(ctx, source, is_audio=True, tmp_dir=tmp_dir)
         if not local:
             raise RuntimeError("yt-dlp failed to download audio.")

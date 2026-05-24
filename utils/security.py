@@ -1,5 +1,8 @@
 # utils/security.py: Injection detection and output sanitization.
 
+import ipaddress
+from urllib.parse import urlparse
+
 INJECTION_PATTERNS = [
     "ignore previous instructions",
     "disregard system",
@@ -30,3 +33,28 @@ def sanitize_prompt(prompt: str) -> str:
 
 def unsafe_output(text: str) -> bool:
     return any(f in text.lower() for f in OUTPUT_FLAGS)
+
+
+def is_public_http_url(url: str) -> bool:
+    """Return True for ordinary public http(s) URLs."""
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return False
+
+    host = parsed.hostname.strip().lower().rstrip(".")
+    if host in {"localhost"} or host.endswith(".localhost"):
+        return False
+
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return True
+
+    return not (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )

@@ -8,6 +8,8 @@ import os
 import tempfile
 import time
 
+from utils.security import is_public_http_url
+
 # Auto-redirect all music.youtube.com links to www.youtube.com: not needed but harmless
 def normalize_url(url: str) -> str:
     if "music.youtube.com" in url:
@@ -131,6 +133,9 @@ class YtDlp(commands.Cog):
 
     async def handle_download(self, ctx, url: str, is_audio: bool):
         url = normalize_url(url)
+        if not is_public_http_url(url):
+            return await ctx.send("Please provide a public http(s) URL.")
+
         start_time = time.perf_counter()
         kind = "Audio" if is_audio else "Video"
 

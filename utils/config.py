@@ -3,19 +3,26 @@
 import os
 import json
 
-CONFIG_PATH = os.getenv("CONFIG_FILE_PATH", "/etc/secrets/config.json")
+CONFIG_PATH = os.getenv("CONFIG_FILE_PATH", "config.json")
+
+DEFAULT_CONFIG = {
+    "prefix": "~",
+}
 
 LAST_DEBUG: dict[int, str] = {}
 
 
 def load_config() -> dict:
+    config = DEFAULT_CONFIG.copy()
     if os.path.exists(CONFIG_PATH):
         try:
             with open(CONFIG_PATH, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+                if isinstance(data, dict):
+                    config.update(data)
         except Exception:
             pass
-    return {"prefix": "~"}
+    return config
 
 
 def save_config(data: dict):

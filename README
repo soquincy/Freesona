@@ -40,6 +40,24 @@ cd Freesona
 pip install -r requirements.txt
 ```
 
+Before pushing changes, run the local checks:
+
+```bash
+python scripts/check_project.py
+```
+
+On Windows PowerShell, you can also run:
+
+```powershell
+.\scripts\check.ps1
+```
+
+To make Git run the checks before pushes to `dev`, enable the included hook once:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 Create a `.env` file:
 
 ```dotenv
