@@ -128,20 +128,24 @@ class UtilCog(commands.Cog):
 
     # Timeout command
     @commands.hybrid_command(name='timeout', aliases=['to'], help='Times out a member.')
-    @app_commands.describe(member="The member to timeout.", time_str="Duration (e.g. 10m, 1h).", reason="Reason for timeout.")
+    @app_commands.describe(
+        member="The member to timeout.",
+        length="Duration (e.g. 10m, 1h).",
+        reason="Reason for timeout."
+    )
     @commands.has_permissions(moderate_members=True)
     @commands.bot_has_permissions(moderate_members=True)
-    async def timeout_cmd(self, ctx, member: discord.Member, time_str: str, *, reason: str = "No reason provided"):
+    async def timeout_cmd(self, ctx, member: discord.Member, length: str, *, reason: str = "No reason provided"):
         await ctx.defer()
         
-        delta = parse_time_string(time_str)
+        delta = parse_time_string(length)
         if not delta:
             await ctx.send("Invalid format. Use `10s`, `5m`, `1h`, etc.")
             return
 
         try:
             await member.timeout(delta, reason=f"Timed out by {ctx.author}: {reason}")
-            await ctx.send(f"{member.mention} has been timed out for {time_str}. Reason: {reason}")
+            await ctx.send(f"{member.mention} has been timed out for {length}. Reason: {reason}")
         except discord.Forbidden:
             await ctx.send("I can't timeout that member.")
 

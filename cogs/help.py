@@ -38,6 +38,7 @@ class HelpCog(commands.Cog):
             util_cmds = []
             media_cmds = []
             ai_cmds = []
+            news_cmds = []
 
             for cmd in self.bot.commands:
                 if cmd.hidden:
@@ -47,10 +48,12 @@ class HelpCog(commands.Cog):
                     fun_cmds.append(f"`{cmd.name}` - {cmd.help or 'No description'}")
                 elif cmd.name in ['kick', 'purge', 'removetimeout', 'timeout', 'ban', 'unban']:
                     mod_cmds.append(f"`{cmd.name}` - {cmd.help or 'No description'}")
-                elif cmd.name in ['math', 'search', 'help']:
+                elif cmd.name in ['math', 'search', 'help', 'ping']:
                     util_cmds.append(f"`{cmd.name}` - {cmd.help or 'No description'}")
                 elif cmd.name in ['download', 'audio', 'separate']:
                     media_cmds.append(f"`{cmd.name}` - {cmd.help or 'No description'}")
+                elif cmd.name in ['rss']:
+                    news_cmds.append(f"`{cmd.name}` - {cmd.help or 'No description'}")
                 elif cmd.name in [
                     'personalock', 'personaunlock', 'personasave',
                     'personaload', 'personalist', 'personadelete',
@@ -67,12 +70,27 @@ class HelpCog(commands.Cog):
                 embed.add_field(name="🛡️ Moderation", value="\n".join(mod_cmds), inline=False)
             if util_cmds:
                 embed.add_field(name="🔧 Utility", value="\n".join(util_cmds), inline=False)
+            if news_cmds:
+                embed.add_field(
+                    name="📰 News",
+                    value=(
+                        "`/rss list` — List all feeds\n"
+                        "`/rss latest <name>` — Fetch latest articles\n"
+                        "`/rss add <name> <url>` — Add a feed *(Admin)*\n"
+                        "`/rss remove <name>` — Remove a feed *(Admin)*\n"
+                        "`/rss defaults` — View built-in feed status *(Admin)*\n"
+                        "`/rss toggledefault <name>` — Enable/disable a built-in *(Admin)*\n"
+                        "`/rss setchannel <#channel>` — Set auto-post channel *(Admin)*\n"
+                        "`/rss clearchannel` — Stop auto-posting *(Admin)*"
+                    ),
+                    inline=False,
+                )
             if ai_cmds:
                 embed.add_field(
                     name="🤖 AI Persona",
                     value=(
                         "\n".join(ai_cmds)
-                        + "\n`/setpersona core` `/setpersona style` — Edit persona (Owner only)"
+                        + "\n`/setpersona` — Open persona editor (Owner only)"
                         + "\n`/autonomy on` `/autonomy off` `/autonomy frequency` — Autonomous mode (Admin only)"
                     ),
                     inline=False

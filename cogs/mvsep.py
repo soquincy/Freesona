@@ -69,6 +69,24 @@ def should_download_with_ytdlp(url: str) -> bool:
     return any(host == domain or host.endswith(f".{domain}") for domain in YTDLP_DOMAINS)
 
 
+def stem_label(file_info: dict, index: int) -> str:
+    raw = " ".join(str(file_info.get(key, "")) for key in ("name", "type", "stem", "instrument"))
+    lower = raw.lower()
+    link = str(file_info.get("download_link") or file_info.get("link") or file_info.get("url", "")).lower()
+    probe = f"{lower} {link}"
+
+    if any(term in probe for term in ("vocal", "vocals", "voice", "singer", "acapella", "accompaniment")):
+        return "Vocals"
+    if any(term in probe for term in ("instrumental", "instrum", "karaoke", "no_vocals", "novocals", "music")):
+        return "Instrumental"
+
+    if index == 0:
+        return "Vocals"
+    if index == 1:
+        return "Instrumental"
+    return f"Stem {index + 1}"
+
+
 class MVSepCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot   = bot
@@ -302,8 +320,8 @@ class MVSepCog(commands.Cog):
                 color=discord.Color.green(),
             )
 
-            for f in files_data:
-                name = f.get("name", "stem")
+            for idx, f in enumerate(files_data):
+                name = stem_label(f, idx)
                 link = f.get("download_link") or f.get("link") or f.get("url", "")
                 if link:
                     embed.add_field(name=name, value=f"[Download]({link})", inline=True)

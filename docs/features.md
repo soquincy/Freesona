@@ -2,15 +2,15 @@
 
 ## Persona System
 
-Freesona's persona is split into five structured fields edited through Discord modals — no single text wall, no restarts.
+Freesona's persona is split into five structured fields edited through a button-based `/setpersona` panel — no restart required.
 
 | Field | Edited via |
 | :--- | :--- |
-| Core Personality & Traits | `/setpersona core` |
-| Background & History | `/setpersona core` |
-| Beliefs, Likes & Dislikes | `/setpersona style` |
-| Language & Communication Style | `/setpersona style` |
-| System Instructions | `/setpersona style` |
+| Core Personality & Traits | `/setpersona` |
+| Background & History | `/setpersona` |
+| Beliefs, Likes & Dislikes | `/setpersona` |
+| Language & Communication Style | `/setpersona` |
+| System Instructions | `/setpersona` |
 
 Changes take effect immediately. The assembled persona is injected as the Gemini system instruction on every generation call.
 
@@ -79,9 +79,15 @@ Attach an image, PDF, audio file, video, or code file to any AI command or conve
 
 ---
 
+## RSS News Feeds
+
+`/rss latest <feed>` reads RSS/Atom feeds and posts the latest headlines. `/rss add`, `/rss remove`, and `/rss list` manage feed sources. Public wire-service RSS availability varies: AFPBB has a public RSS feed for limited personal/non-commercial use, Reuters public RSS has been discontinued, and Reuters/AP wire RSS generally requires client feeds or custom feed URLs.
+
+---
+
 ## Audio Separation
 
-`~separate` isolates vocals and instrumental from any audio using MVSEP's BS Roformer model (SDR vocals: 11.89, SDR instrum: 18.20). Accepts a file attachment, a direct audio URL, or any platform URL supported by yt-dlp. Output links are hosted by MVSEP and expire after some time. Free tier allows one job at a time. Requires `MVSEP_API_KEY`.
+`~separate` isolates vocals and instrumental from any audio using MVSEP's BS Roformer model (SDR vocals: 11.89, SDR instrum: 18.20). Accepts a file attachment, a direct audio URL, or any platform URL supported by yt-dlp. Output links are labeled as vocals/instrumental where MVSEP metadata allows it, with a two-stem fallback. Links are hosted by MVSEP and expire after some time. Free tier allows one job at a time. Requires `MVSEP_API_KEY`.
 
 ---
 

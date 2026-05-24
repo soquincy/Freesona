@@ -107,6 +107,7 @@ def load_mvsep_helpers() -> dict:
         elif isinstance(node, ast.FunctionDef) and node.name in {
             "is_direct_audio_url",
             "should_download_with_ytdlp",
+            "stem_label",
         }:
             keep.append(node)
 
@@ -126,6 +127,9 @@ def check_mvsep_url_routing() -> None:
     assert should_ytdlp("https://soundcloud.com/user/track")
     assert is_direct_audio("https://cdn.example.com/file.mp3?token=1")
     assert not should_ytdlp("https://cdn.example.com/file.mp3")
+    assert helpers["stem_label"]({"name": "stem"}, 0) == "Vocals"
+    assert helpers["stem_label"]({"name": "stem"}, 1) == "Instrumental"
+    assert helpers["stem_label"]({"name": "vocals.mp3"}, 1) == "Vocals"
 
 
 def check_module_registry() -> None:
@@ -141,7 +145,18 @@ def check_module_registry() -> None:
     assert enabled["mvsep"] is True
     assert "unknown" not in enabled
     assert modules.module_extension("GENAI") == "cogs.genai"
+    assert modules.module_extension("news") == "cogs.news"
     assert modules.module_extension("missing") is None
+
+
+def check_rss_parser() -> None:
+    rss = reload_local_module("utils.rss")
+    sample = """<?xml version="1.0"?><rss><channel><item><title>One</title><link>https://example.com/1</link><pubDate>Sun, 24 May 2026 01:00:00 GMT</pubDate><description>Hello &amp;amp; hi</description></item></channel></rss>"""
+    items = rss.parse_feed(sample)
+    assert len(items) == 1
+    assert items[0].title == "One"
+    assert items[0].link == "https://example.com/1"
+    assert "Hello" in items[0].summary
 
 
 def check_json_files() -> None:
@@ -215,6 +230,7 @@ def main() -> int:
         ("public URL guard", check_public_url_guard),
         ("MVSEP URL routing", check_mvsep_url_routing),
         ("module registry", check_module_registry),
+        ("RSS parser", check_rss_parser),
         ("JSON files", check_json_files),
         (".env.sample", check_env_sample),
         ("tracked secrets", check_secret_files_not_tracked),
