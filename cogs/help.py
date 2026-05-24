@@ -47,7 +47,7 @@ class HelpCog(commands.Cog):
                     fun_cmds.append(f"`{cmd.name}` - {cmd.help or 'No description'}")
                 elif cmd.name in ['kick', 'purge', 'removetimeout', 'timeout', 'ban', 'unban']:
                     mod_cmds.append(f"`{cmd.name}` - {cmd.help or 'No description'}")
-                elif cmd.name in ['math', 'search', 'help']:
+                elif cmd.name in ['math', 'search', 'help', 'rss']:
                     util_cmds.append(f"`{cmd.name}` - {cmd.help or 'No description'}")
                 elif cmd.name in ['download', 'audio', 'separate']:
                     media_cmds.append(f"`{cmd.name}` - {cmd.help or 'No description'}")
@@ -72,7 +72,7 @@ class HelpCog(commands.Cog):
                     name="🤖 AI Persona",
                     value=(
                         "\n".join(ai_cmds)
-                        + "\n`/setpersona core` `/setpersona style` — Edit persona (Owner only)"
+                        + "\n`/setpersona` — Open persona editor (Owner only)"
                         + "\n`/autonomy on` `/autonomy off` `/autonomy frequency` — Autonomous mode (Admin only)"
                     ),
                     inline=False

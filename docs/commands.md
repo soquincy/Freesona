@@ -10,6 +10,10 @@ Default prefix is `~`. Change it with `~prefix <symbol>`. All commands work as b
 | `~ask <question>` | Conversational response using active persona | Anyone |
 | `~search <query>` | Web search with AI summary | Anyone |
 | `~separate <url>` | Vocal/instrumental separation via MVSEP | Anyone |
+| `/rss latest <feed>` | Show latest items from an RSS/Atom feed | Anyone |
+| `/rss list` | List configured RSS/Atom feeds | Anyone |
+| `/rss add <name> <url>` | Add or update an RSS/Atom feed | Administrator |
+| `/rss remove <name>` | Remove a custom RSS/Atom feed | Administrator |
 
 ## Conversation Channel
 
@@ -26,8 +30,7 @@ The bot responds to all messages in the conversation channel. It keeps the last 
 
 | Command | Action | Permissions |
 | :--- | :--- | :--- |
-| `/setpersona core` | Edit core personality and background | Bot Owner |
-| `/setpersona style` | Edit beliefs, language style, system instructions | Bot Owner |
+| `/setpersona` | Open the button-based persona editor | Bot Owner |
 | `/personalock` | Lock persona against changes | Bot Owner |
 | `/personaunlock` | Unlock persona | Bot Owner |
 | `/personasave <name>` | Save current persona as a preset | Bot Owner |
@@ -49,6 +52,8 @@ The bot responds to all messages in the conversation channel. It keeps the last 
 | `/model show` | Show the active Gemini model | Bot Owner |
 | `/model set <name>` | Set the active Gemini model | Bot Owner |
 | `/model reset` | Reset to the environment/default model | Bot Owner |
+
+Module and model names include slash-command suggestions.
 
 ## Autonomy
 

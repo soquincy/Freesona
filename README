@@ -16,7 +16,7 @@ No credits. No voting. No "upgrade to unlock." Just a bot that does what you tel
 
 ## What makes it worth forking
 
-**The persona system is built to feel alive.** `/setpersona core` and `/setpersona style` open structured modal editors split by category. Changes take effect immediately, no restart required.
+**The persona system is built to feel alive.** `/setpersona` opens a button-based editor for structured persona fields. Changes take effect immediately, no restart required.
 
 **It remembers — short and long term.** Short-term: rolling per-channel context with automatic summarization. Long-term: facts about each user are extracted, scored by importance, and persisted to disk — injected automatically into future conversations.
 
@@ -131,6 +131,15 @@ The bot owner can switch Gemini models without restarting:
 
 Conversation channel behavior can be narrowed with `/chatmode all`, `/chatmode mentions`, or `/chatmode smart`.
 
+RSS/Atom feeds can be read and managed with:
+
+```text
+/rss list
+/rss latest <feed>
+/rss add <name> <url>
+/rss remove <name>
+```
+
 ---
 
 ## Acknowledgements
@@ -155,11 +164,13 @@ Licensed under the **MIT License**. See [LICENSE](LICENSE).
 
 * Persona gallery in the wiki
 * Per-fact memory controls — delete or edit one remembered fact without clearing the user
+* RSS feed presets for reliable wire/news sources as public feeds are confirmed
 
 ### Medium-term
 
 * Multi-provider support — swap AI providers without changing command code
 * Message claiming system for multi-instance deployments
+* RSS monitors — post matching feed items into selected channels
 
 ### Long-term
 

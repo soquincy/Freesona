@@ -14,6 +14,7 @@ OPTIONAL_MODULES = {
     "moderation": "cogs.utils",
     "genai": "cogs.genai",
     "wolfram": "cogs.wolfram",
+    "news": "cogs.news",
     "ytdlp": "cogs.ytdlp",
     "mvsep": "cogs.mvsep",
 }

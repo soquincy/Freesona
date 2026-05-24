@@ -32,7 +32,7 @@ from utils.memory import (
 from utils.intent import evaluate_intent, FREQUENCY_THRESHOLD, INTENT_IGNORE
 from utils.persona import (
     PERSONA_DATA, CURRENT_PERSONA, PERSONA_LOCKED, LEGACY_DETECTED,
-    SetPersonaGroup,
+    open_persona_panel,
     assemble_persona, save_persona_json, default_persona_json,
     load_profiles, save_profiles,
 )
@@ -76,8 +76,12 @@ def should_respond_in_chat_channel(message: discord.Message, bot_user: discord.C
 class GenAICog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.setpersona_group = SetPersonaGroup()
-        bot.tree.add_command(self.setpersona_group)
+        self.setpersona_command = app_commands.Command(
+            name="setpersona",
+            description="Open the persona editor (Owner only).",
+            callback=open_persona_panel,
+        )
+        bot.tree.add_command(self.setpersona_command)
 
     async def cog_unload(self):
         self.bot.tree.remove_command("setpersona")
@@ -393,7 +397,7 @@ class GenAICog(commands.Cog):
         import utils.persona as p
         last   = LAST_DEBUG.get(ctx.channel.id, "*(no prompt sent in this channel yet)*")
         locked = "Yes" if p.PERSONA_LOCKED else "No"
-        legacy = "Yes — migrate via `/setpersona core` and `/setpersona style`" if p.LEGACY_DETECTED else "No"
+        legacy = "Yes — migrate via `/setpersona`" if p.LEGACY_DETECTED else "No"
         config = load_config()
         autonomy_status = "On" if config.get("autonomy", False) else "Off"
         autonomy_freq   = config.get("autonomy_frequency", "default")
@@ -461,6 +465,7 @@ class GenAICog(commands.Cog):
     # /chatmode
     # -------------------------------------------------------------------
     @commands.hybrid_command(name='chatmode', help='Set conversation channel response mode (Admin only).')
+    @app_commands.describe(mode="Mode can be `all`, `mentions`, or `smart`.")
     @commands.has_permissions(administrator=True)
     async def chat_mode(self, ctx, mode: str):
         mode = mode.lower().strip()

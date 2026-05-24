@@ -1,10 +1,36 @@
 # cogs/admin.py: Owner/admin runtime controls.
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from utils.config import load_config, save_config, get_model_name
 from utils.modules import OPTIONAL_MODULES, load_enabled_modules, module_extension, save_module_state
+
+MODEL_CHOICES = [
+    "gemini-flash-lite-latest",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.0-flash",
+]
+
+
+async def module_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    current = current.lower()
+    choices = []
+    for name in sorted(OPTIONAL_MODULES):
+        if current in name:
+            choices.append(app_commands.Choice(name=name, value=name))
+    return choices[:25]
+
+
+async def model_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    current = current.lower()
+    return [
+        app_commands.Choice(name=model, value=model)
+        for model in MODEL_CHOICES
+        if current in model.lower()
+    ][:25]
 
 
 class AdminCog(commands.Cog):
@@ -41,6 +67,7 @@ class AdminCog(commands.Cog):
 
     @module_group.command(name="enable", help="Enable a module and load it now.")
     @commands.has_permissions(administrator=True)
+    @app_commands.autocomplete(name=module_autocomplete)
     async def module_enable(self, ctx, name: str):
         key = name.lower().strip()
         ext = module_extension(key)
@@ -68,6 +95,7 @@ class AdminCog(commands.Cog):
 
     @module_group.command(name="disable", help="Disable a module and unload it now.")
     @commands.has_permissions(administrator=True)
+    @app_commands.autocomplete(name=module_autocomplete)
     async def module_disable(self, ctx, name: str):
         key = name.lower().strip()
         ext = module_extension(key)
@@ -95,6 +123,7 @@ class AdminCog(commands.Cog):
 
     @module_group.command(name="reload", help="Reload an enabled module.")
     @commands.has_permissions(administrator=True)
+    @app_commands.autocomplete(name=module_autocomplete)
     async def module_reload(self, ctx, name: str):
         key = name.lower().strip()
         ext = module_extension(key)
@@ -135,6 +164,7 @@ class AdminCog(commands.Cog):
 
     @model_group.command(name="set", help="Set the Gemini model.")
     @commands.is_owner()
+    @app_commands.autocomplete(name=model_autocomplete)
     async def model_set(self, ctx, name: str):
         config = load_config()
         config["model_name"] = name.strip()
