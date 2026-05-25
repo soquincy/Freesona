@@ -24,7 +24,7 @@ SEARCH_ENGINE_ID      = os.getenv("SEARCH_ENGINE_ID")
 # ---------------------------------------------------------------------------
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-SEARCH_MODEL   = "gemini-2.0-flash"
+SEARCH_MODEL   = "gemini-flash-lite-latest"
 # ---------------------------------------------------------------------------
 # Result type
 # ---------------------------------------------------------------------------
