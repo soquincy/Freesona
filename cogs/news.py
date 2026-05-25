@@ -1,12 +1,13 @@
 # cogs/news.py: RSS/Atom news feed commands + auto-posting loop.
 
+import os
 import asyncio
 import logging
-
 import aiohttp
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
+from urllib.parse import urlparse
 
 from utils.config import load_config, save_config
 from utils.rss import (
@@ -19,8 +20,7 @@ from utils.security import is_public_http_url
 logger = logging.getLogger("FreesonaBot")
 
 POLL_INTERVAL_MINUTES = 5
-RSS_CHANNEL_KEY       = "rss_channel_id"
-
+RSS_CHANNELS_KEY = "rss_channels"  # Dict of {guild_id: channel_id}
 
 async def feed_autocomplete(
     interaction: discord.Interaction, current: str
@@ -32,6 +32,28 @@ async def feed_autocomplete(
             choices.append(app_commands.Choice(name=name, value=name))
     return choices[:25]
 
+def get_logo_url(article_link: str) -> str:
+    """Extracts base domain and returns LogoKit URL with environment-based token."""
+    if not article_link:
+        return ""
+    
+    token = os.getenv("LOGOKIT_TOKEN")
+    if not token:
+        logger.warning("LOGOKIT_TOKEN is missing from environment variables.")
+        return ""
+
+    try:
+        hostname = urlparse(article_link).netloc.lower()
+        parts = hostname.split('.')
+        # Logic to handle second-level domains like .co.uk
+        if len(parts) >= 3 and parts[-2] in ("co", "com", "org", "net", "gov"):
+            domain = ".".join(parts[-3:])
+        else:
+            domain = ".".join(parts[-2:])
+            
+        return f"https://img.logokit.com/{domain}?token={token}"
+    except Exception:
+        return ""
 
 class NewsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -41,29 +63,44 @@ class NewsCog(commands.Cog):
     async def cog_unload(self):
         self.poll_feeds.cancel()
 
-    # -------------------------------------------------------------------
-    # Background polling loop
-    # -------------------------------------------------------------------
+    def _build_news_embed(self, item, name: str):
+        """Standardized embed builder with LogoKit footer icon."""
+        logo_url = get_logo_url(item.link)
+        
+        embed = discord.Embed(
+            title=item.title[:256],
+            url=item.link,
+            color=discord.Color.blurple(),
+        )
+        if item.author:
+            embed.set_author(name=item.author[:256])
+        if item.summary:
+            embed.description = item.summary[:400]
+        if item.image_url:
+            embed.set_image(url=item.image_url)
+
+        footer_text = name
+        if item.published:
+            footer_text += f"  •  {item.published}"
+        
+        embed.set_footer(text=footer_text, icon_url=logo_url)
+        return embed
 
     @tasks.loop(minutes=POLL_INTERVAL_MINUTES)
     async def poll_feeds(self):
         await self.bot.wait_until_ready()
 
-        config     = load_config()
-        channel_id = config.get(RSS_CHANNEL_KEY)
-        if not channel_id:
+        config = load_config()
+        rss_channels = config.get(RSS_CHANNELS_KEY, {})
+        if not rss_channels:
             return
 
-        channel = self.bot.get_channel(channel_id)
-        if not isinstance(channel, discord.TextChannel):
-            return
-
-        feeds    = load_rss_feeds(config)
-        seen     = load_seen_links(config)
+        feeds = load_rss_feeds(config)
+        seen = load_seen_links(config)
         new_links: list[str] = []
 
         async with aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=12)
+            timeout=aiohttp.ClientTimeout(total=15)
         ) as session:
             for name, url in feeds.items():
                 try:
@@ -81,35 +118,26 @@ class NewsCog(commands.Cog):
                         if not item.link or item.link in seen:
                             continue
 
-                        embed = discord.Embed(
-                            title=item.title[:256],
-                            url=item.link,
-                            color=discord.Color.blurple(),
-                        )
-                        if item.author:
-                            embed.set_author(name=item.author[:256])
-                        if item.summary:
-                            embed.description = item.summary[:400]
-                        if item.image_url:
-                            embed.set_image(url=item.image_url)
+                        embed = self._build_news_embed(item, name)
 
-                        footer_text = name
-                        if item.published:
-                            footer_text += f"  •  {item.published}"
-                        embed.set_footer(text=footer_text)
+                        for guild_id_str, channel_id in rss_channels.items():
+                            # Ensure channel_id is an int for get_channel
+                            channel = self.bot.get_channel(int(channel_id))
+                            if not isinstance(channel, discord.TextChannel):
+                                continue
 
-                        try:
-                            await channel.send(embed=embed)
-                        except discord.Forbidden:
-                            logger.error(f"RSS: missing send permission in channel {channel_id}")
-                            return
-                        except discord.HTTPException as e:
-                            logger.warning(f"RSS: failed to send item from {name}: {e}")
-                            continue
+                            try:
+                                await channel.send(embed=embed)
+                            except discord.Forbidden:
+                                logger.error(f"RSS: Permission denied in guild {guild_id_str}")
+                                continue
+                            except discord.HTTPException as e:
+                                logger.warning(f"RSS: Failed to send item from {name}: {e}")
+                                continue
 
                         new_links.append(item.link)
                         seen.add(item.link)
-                        await asyncio.sleep(0.5)  # avoid rate-limiting on burst posts
+                        await asyncio.sleep(0.5)
 
                 except Exception as e:
                     logger.warning(f"RSS poll error for {name}: {e}")
@@ -123,10 +151,6 @@ class NewsCog(commands.Cog):
     async def before_poll(self):
         await self.bot.wait_until_ready()
 
-    # -------------------------------------------------------------------
-    # /rss group
-    # -------------------------------------------------------------------
-
     @commands.hybrid_group(
         name="rss",
         invoke_without_command=True,
@@ -139,31 +163,34 @@ class NewsCog(commands.Cog):
             ephemeral=True if ctx.interaction else False,
         )
 
-    @rss_group.command(name="setchannel", help="Set the channel for auto-posted RSS articles (Admin only).")
+    @rss_group.command(name="setchannel", help="Set the channel for auto-posts (Admin only).")
     @commands.has_permissions(administrator=True)
     async def rss_setchannel(self, ctx, channel: discord.TextChannel):
         config = load_config()
-        config[RSS_CHANNEL_KEY] = channel.id
+        channels = config.setdefault(RSS_CHANNELS_KEY, {})
+        channels[str(ctx.guild.id)] = channel.id
         save_config(config)
-        await ctx.send(
-            f"RSS articles will be posted to {channel.mention} every {POLL_INTERVAL_MINUTES} minutes.",
-            ephemeral=True if ctx.interaction else False,
-        )
+        await ctx.send(f"RSS articles will post to {channel.mention}.", ephemeral=True)
 
-    @rss_group.command(name="clearchannel", help="Stop auto-posting RSS articles (Admin only).")
+    @rss_group.command(name="clearchannel", help="Stop auto-posting RSS (Admin only).")
     @commands.has_permissions(administrator=True)
     async def rss_clearchannel(self, ctx):
         config = load_config()
-        config.pop(RSS_CHANNEL_KEY, None)
-        save_config(config)
-        await ctx.send("RSS auto-posting disabled.", ephemeral=True if ctx.interaction else False)
+        channels = config.get(RSS_CHANNELS_KEY, {})
+        if str(ctx.guild.id) in channels:
+            del channels[str(ctx.guild.id)]
+            save_config(config)
+            await ctx.send("RSS auto-posting disabled.", ephemeral=True)
+        else:
+            await ctx.send("No RSS channel configured.", ephemeral=True)
 
     @rss_group.command(name="list", help="List all configured RSS feeds.")
     async def rss_list(self, ctx):
-        config  = load_config()
-        feeds   = load_rss_feeds(config)
-        channel_id = config.get(RSS_CHANNEL_KEY)
-        channel_mention = f"<#{channel_id}>" if channel_id else "*(not set — use `/rss setchannel`)*"
+        config = load_config()
+        feeds = load_rss_feeds(config)
+        channels = config.get(RSS_CHANNELS_KEY, {})
+        channel_id = channels.get(str(ctx.guild.id))
+        channel_mention = f"<#{channel_id}>" if channel_id else "*(not set)*"
 
         lines = [f"`{name}`: {url}" for name, url in sorted(feeds.items())]
         embed = discord.Embed(
@@ -172,19 +199,16 @@ class NewsCog(commands.Cog):
             color=discord.Color.blue(),
         )
         embed.set_footer(text=f"Auto-post channel: {channel_mention}")
-        await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
+        await ctx.send(embed=embed, ephemeral=True)
 
     @rss_group.command(name="latest", help="Show latest items from an RSS feed.")
     @app_commands.autocomplete(name=feed_autocomplete)
     async def rss_latest(self, ctx, name: str, limit: int = 5):
         feeds = load_rss_feeds()
-        key   = name.lower().strip()
-        url   = feeds.get(key)
+        key = name.lower().strip()
+        url = feeds.get(key)
         if not url:
-            await ctx.send(
-                f"Unknown RSS feed `{key}`. Use `/rss list`.",
-                ephemeral=True if ctx.interaction else False,
-            )
+            await ctx.send(f"Unknown RSS feed `{key}`.", ephemeral=True)
             return
 
         limit = max(1, min(limit, 10))
@@ -207,31 +231,10 @@ class NewsCog(commands.Cog):
             return
 
         if not items:
-            await ctx.send(f"No items found in `{key}`.")
+            await ctx.send(f"No items found.")
             return
 
-        # Discord permits sending an array of up to 10 embeds in one message.
-        # This renders images and bylines neatly for every item.
-        embeds = []
-        for item in items:
-            embed = discord.Embed(
-                title=item.title[:256],
-                url=item.link,
-                color=discord.Color.blue(),
-            )
-            if item.author:
-                embed.set_author(name=item.author[:256])
-            if item.summary:
-                embed.description = item.summary[:400]
-            if item.image_url:
-                embed.set_image(url=item.image_url)
-
-            footer_text = key
-            if item.published:
-                footer_text += f"  •  {item.published}"
-            embed.set_footer(text=footer_text)
-            embeds.append(embed)
-
+        embeds = [self._build_news_embed(item, key) for item in items]
         await ctx.send(embeds=embeds)
 
     @rss_group.command(name="add", help="Add or update an RSS feed (Admin only).")
@@ -239,73 +242,23 @@ class NewsCog(commands.Cog):
     async def rss_add(self, ctx, name: str, url: str):
         key = name.lower().strip()
         if not key.replace("-", "").replace("_", "").isalnum():
-            await ctx.send(
-                "Feed name must use letters, numbers, dashes, or underscores.",
-                ephemeral=True if ctx.interaction else False,
-            )
+            await ctx.send("Invalid name format.", ephemeral=True)
             return
         if not is_public_http_url(url):
-            await ctx.send(
-                "Feed URL must be a public http(s) URL.",
-                ephemeral=True if ctx.interaction else False,
-            )
+            await ctx.send("Invalid URL.", ephemeral=True)
             return
         save_rss_feed(key, url)
-        await ctx.send(f"RSS feed `{key}` saved.", ephemeral=True if ctx.interaction else False)
+        await ctx.send(f"RSS feed `{key}` saved.", ephemeral=True)
 
-    @rss_group.command(name="remove", help="Remove an RSS feed (Admin only). Built-in feeds can also be removed.")
+    @rss_group.command(name="remove", help="Remove an RSS feed (Admin only).")
     @commands.has_permissions(administrator=True)
     @app_commands.autocomplete(name=feed_autocomplete)
     async def rss_remove(self, ctx, name: str):
         key = name.lower().strip()
         if delete_rss_feed(key):
-            await ctx.send(f"RSS feed `{key}` removed.", ephemeral=True if ctx.interaction else False)
+            await ctx.send(f"RSS feed `{key}` removed.", ephemeral=True)
         else:
-            await ctx.send(f"No feed named `{key}` found.", ephemeral=True if ctx.interaction else False)
-
-    @rss_group.command(name="defaults", help="Toggle built-in RSS feeds on or off (Admin only).")
-    @commands.has_permissions(administrator=True)
-    async def rss_defaults(self, ctx):
-        config   = load_config()
-        disabled = set(config.get(RSS_DISABLED_KEY, []))
-
-        lines = []
-        for name in sorted(DEFAULT_RSS_FEEDS):
-            status = "🔴 off" if name in disabled else "🟢 on"
-            lines.append(f"`{name}` — {status}")
-
-        embed = discord.Embed(
-            title="Built-in RSS Feeds",
-            description="\n".join(lines),
-            color=discord.Color.blurple(),
-        )
-        embed.set_footer(text="Use /rss remove <name> to disable · /rss add <name> <url> to re-enable")
-        await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
-
-    @rss_group.command(name="toggledefault", help="Enable or disable a built-in RSS feed (Admin only).")
-    @commands.has_permissions(administrator=True)
-    @app_commands.describe(name="The built-in feed to toggle.")
-    async def rss_toggledefault(self, ctx, name: str):
-        key = name.lower().strip()
-        if key not in DEFAULT_RSS_FEEDS:
-            await ctx.send(
-                f"`{key}` is not a built-in feed. Use `/rss defaults` to see the list.",
-                ephemeral=True if ctx.interaction else False,
-            )
-            return
-
-        config   = load_config()
-        disabled: list = config.setdefault(RSS_DISABLED_KEY, [])
-
-        if key in disabled:
-            disabled.remove(key)
-            save_config(config)
-            await ctx.send(f"✅ Built-in feed `{key}` **enabled**.", ephemeral=True if ctx.interaction else False)
-        else:
-            disabled.append(key)
-            save_config(config)
-            await ctx.send(f"🔴 Built-in feed `{key}` **disabled**.", ephemeral=True if ctx.interaction else False)
-
+            await ctx.send(f"Feed `{key}` not found.", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(NewsCog(bot))
