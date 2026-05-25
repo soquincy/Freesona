@@ -11,6 +11,7 @@
 import asyncio
 import logging
 import time
+import re
 import urllib.parse
 from typing import Optional
 
@@ -265,6 +266,41 @@ class GenAICog(commands.Cog):
         embed.set_footer(text=embed_footer(ctx.author.display_name, query))
         await ctx.send(embed=embed)
 
+def clean_sources_block(sources_text: str, max_length: int = 1024) -> str:
+    """
+    Cleans up the sources text block by extracting raw domains or formatting 
+    markdown links safely without cutting them off mid-syntax.
+    """
+    # Find all markdown links [Text](URL)
+    links = re.findall(r'\[([^\]]+)\]\(([^)]+)\)', sources_text)
+    
+    if not links:
+        # If it's just a raw list of domains separated by newlines/spaces
+        lines = [line.strip() for line in sources_text.split('\n') if line.strip()]
+        cleaned = "\n".join(lines[:5])  # Limit to top 5
+        return cleaned[:max_length]
+
+    # Reconstruct the links cleanly
+    cleaned_links = []
+    current_length = 0
+    
+    for text, url in links[:5]:  # Limit to top 5 sources
+        # If the URL is a massive Google redirect, extract the actual target if possible, 
+        # or just fallback to displaying the clean domain name to save space.
+        if "grounding-api-redirect" in url:
+            # Displaying just the domain name as text prevents massive hidden URL bloat
+            entry = f"• {text}"
+        else:
+            entry = f"• [{text}]({url})"
+            
+        if current_length + len(entry) + 1 > max_length:
+            break
+            
+        cleaned_links.append(entry)
+        current_length += len(entry) + 1
+
+    return "\n".join(cleaned_links)
+
     # -------------------------------------------------------------------
     # ~search
     # -------------------------------------------------------------------
@@ -303,12 +339,10 @@ class GenAICog(commands.Cog):
             color=discord.Color.blue()
         )
 
-        # 3. Add Sources or Fallback link (Once only!)
+        # 3. Add Sources or Fallback link
         if result.has_sources:
-            sources_text = result.sources_block(max=5)
-            # Hard limit check for Discord's 1024 field value limit
-            if len(sources_text) > 1024:
-                sources_text = sources_text[:1021] + "..."
+            # Clean the block before checking length to prevent broken markdown syntax
+            sources_text = clean_sources_block(result.sources_block(max=5))
             embed.add_field(name="Sources", value=sources_text, inline=False)
         else:
             url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
