@@ -279,8 +279,7 @@ class GenAICog(commands.Cog):
 
         result = await web_search(query)
 
-        # Gemini grounding returns a synthesized answer directly in result.text.
-        # Legacy fallback returns raw link snippets — pass through safe_generate.
+        # 1. Prepare the main description text
         if result.has_sources:
             text = result.text[:4096]
         else:
@@ -297,37 +296,25 @@ class GenAICog(commands.Cog):
             )
             text = response.first_text()[:4096]
 
+        # 2. Build the Embed
         embed = discord.Embed(
             title=f"Search: {query}",
             description=text or "No results found.",
             color=discord.Color.blue()
         )
 
+        # 3. Add Sources or Fallback link (Once only!)
         if result.has_sources:
-            # FIX: Ensure sources_block doesn't exceed Discord's 1024-character field limit
             sources_text = result.sources_block(max=5)
+            # Hard limit check for Discord's 1024 field value limit
             if len(sources_text) > 1024:
                 sources_text = sources_text[:1021] + "..."
-            
             embed.add_field(name="Sources", value=sources_text, inline=False)
         else:
             url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
             embed.add_field(name="Full results", value=url, inline=False)
 
-        embed.set_footer(text=embed_footer(ctx.author.display_name, query))
-        await ctx.send(embed=embed)
-
-        if result.has_sources:
-            # FIX: Ensure sources_block doesn't exceed Discord's 1024-character field limit
-            sources_text = result.sources_block(max=5)
-            if len(sources_text) > 1024:
-                sources_text = sources_text[:1021] + "..."
-            
-            embed.add_field(name="Sources", value=sources_text, inline=False)
-        else:
-            url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
-            embed.add_field(name="Full results", value=url, inline=False)
-
+        # 4. Finalize and Send
         embed.set_footer(text=embed_footer(ctx.author.display_name, query))
         await ctx.send(embed=embed)
 
