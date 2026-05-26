@@ -544,39 +544,44 @@ def clean_sources_block(sources_text: str, max_length: int = 1024) -> str:
     # -------------------------------------------------------------------
     # /autonomy
     # -------------------------------------------------------------------
-    @commands.hybrid_command(name="autonomy", description="Control autonomous mode (Admin only).")
+    @app_commands.command(name="autonomy", description="Configure autonomy mode settings (Admin only).")
     @app_commands.describe(
-        action="Choose to toggle autonomy or change frequency",
-        frequency="Set the chime-in rate (only for 'frequency' action)"
+        action="on / off / frequency",
+        frequency="low / default / high — only used when action is 'frequency'"
     )
-    @commands.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(administrator=True)
     async def autonomy_cmd(
         self,
-        ctx: commands.Context,
-        action: Literal["on", "off", "frequency"], # This creates the dropdown menu
-        frequency: Optional[Literal["low", "default", "high"]] = None # Dropdown for frequency too
+        interaction: discord.Interaction,
+        action: str,
+        frequency: Optional[str] = None,
     ):
         config = load_config()
-        is_slash = ctx.interaction is not None
+        action = action.lower().strip()
 
         if action == "on":
             config["autonomy"] = True
             save_config(config)
-            await ctx.send("Autonomy mode enabled.", ephemeral=is_slash)
-            
+            await interaction.response.send_message("Autonomy mode enabled.", ephemeral=True)
         elif action == "off":
             config["autonomy"] = False
             save_config(config)
-            await ctx.send("Autonomy mode disabled.", ephemeral=is_slash)
-            
+            await interaction.response.send_message("Autonomy mode disabled.", ephemeral=True)
         elif action == "frequency":
-            if not frequency:
-                await ctx.send("Please specify a frequency (low, default, or high).", ephemeral=is_slash)
+            if frequency not in ("low", "default", "high"):
+                await interaction.response.send_message(
+                    "Frequency must be `low`, `default`, or `high`.", ephemeral=True
+                )
                 return
             config["autonomy_frequency"] = frequency
             save_config(config)
-            await ctx.send(f"Autonomy frequency set to `{frequency}`.", ephemeral=is_slash)
-
+            await interaction.response.send_message(
+                f"Autonomy frequency set to `{frequency}`.", ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                "Unknown action. Use `on`, `off`, or `frequency`.", ephemeral=True
+            )
 
 async def setup(bot):
     await bot.add_cog(GenAICog(bot))
