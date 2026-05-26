@@ -47,3 +47,7 @@ dist/
 # Python tooling
 .coverage
 htmlcov/
+
+# Debugging
+debug.log
+commands_dump.yaml
