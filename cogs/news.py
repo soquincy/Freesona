@@ -42,11 +42,23 @@ def get_logo_url(article_link: str) -> str:
         logger.warning("LOGOKIT_TOKEN is missing from environment variables.")
         return ""
 
+    # Clean the token of any potential surrounding quotes or whitespace common in VPS/Docker envs
+    token = token.strip().strip("'\"")
+    if not token:
+        return ""
+
     try:
         hostname = urlparse(article_link).netloc.lower()
+        # Strip port if present
+        if ":" in hostname:
+            hostname = hostname.split(":")[0]
+            
         parts = hostname.split('.')
+        if len(parts) < 2:
+            return ""
+            
         # Logic to handle second-level domains like .co.uk
-        if len(parts) >= 3 and parts[-2] in ("co", "com", "org", "net", "gov"):
+        if len(parts) >= 3 and parts[-2] in ("co", "com", "org", "net", "gov", "edu", "ac"):
             domain = ".".join(parts[-3:])
         else:
             domain = ".".join(parts[-2:])
@@ -83,7 +95,10 @@ class NewsCog(commands.Cog):
         if item.published:
             footer_text += f"  •  {item.published}"
         
-        embed.set_footer(text=footer_text, icon_url=logo_url)
+        if logo_url:
+            embed.set_footer(text=footer_text, icon_url=logo_url)
+        else:
+            embed.set_footer(text=footer_text)
         return embed
 
     @tasks.loop(minutes=POLL_INTERVAL_MINUTES)
@@ -115,7 +130,15 @@ class NewsCog(commands.Cog):
                     items = parse_feed(xml_text, limit=10)
 
                     for item in items:
-                        if not item.link or item.link in seen:
+                        if not item.link:
+                            continue
+                            
+                        # Resolve relative links using the feed's base URL
+                        if not urlparse(item.link).netloc:
+                            from urllib.parse import urljoin
+                            item.link = urljoin(url, item.link)
+
+                        if item.link in seen:
                             continue
 
                         embed = self._build_news_embed(item, name)
@@ -226,6 +249,10 @@ class NewsCog(commands.Cog):
                         return
                     xml_text = await resp.text()
             items = parse_feed(xml_text, limit=limit)
+            for item in items:
+                if item.link and not urlparse(item.link).netloc:
+                    from urllib.parse import urljoin
+                    item.link = urljoin(url, item.link)
         except Exception as e:
             await ctx.send(f"Could not read feed `{key}`: {e}")
             return
