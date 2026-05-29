@@ -179,6 +179,19 @@ class AdminCog(commands.Cog):
         save_config(config)
         await ctx.send(f"Model reset to `{get_model_name()}`.", ephemeral=True if ctx.interaction else False)
 
+    # ------------------------------------------------------------------
+    # /sync
+    # ------------------------------------------------------------------
+    @commands.hybrid_command(name="sync", help="Sync all global slash commands (Owner only).")
+    @commands.is_owner()
+    async def sync_commands(self, ctx):
+        await ctx.defer(ephemeral=True) # Tells Discord the bot is thinking
+        try:
+            synced = await self.bot.tree.sync()
+            await ctx.send(f"Synced {len(synced)} commands.", ephemeral=True)
+        except Exception as e:
+            await ctx.send(f"Sync failed: {e}", ephemeral=True)
+
 
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))

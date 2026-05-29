@@ -11,8 +11,9 @@
 import asyncio
 import logging
 import time
+import re
 import urllib.parse
-from typing import Optional
+from typing import Literal, Optional
 
 import discord
 from discord import app_commands
@@ -72,6 +73,40 @@ def should_respond_in_chat_channel(message: discord.Message, bot_user: discord.C
         return is_mention or is_reply or bool(message.attachments)
     return True
 
+def clean_sources_block(sources_text: str, max_length: int = 1024) -> str:
+    """
+    Cleans up the sources text block by extracting raw domains or formatting 
+    markdown links safely without cutting them off mid-syntax.
+    """
+    # Find all markdown links [Text](URL)
+    links = re.findall(r'\[([^\]]+)\]\(([^)]+)\)', sources_text)
+    
+    if not links:
+        # If it's just a raw list of domains separated by newlines/spaces
+        lines = [line.strip() for line in sources_text.split('\n') if line.strip()]
+        cleaned = "\n".join(lines[:5])  # Limit to top 5
+        return cleaned[:max_length]
+
+    # Reconstruct the links cleanly
+    cleaned_links = []
+    current_length = 0
+    
+    for text, url in links[:5]:  # Limit to top 5 sources
+        # If the URL is a massive Google redirect, extract the actual target if possible, 
+        # or just fallback to displaying the clean domain name to save space.
+        if "grounding-api-redirect" in url:
+            # Displaying just the domain name as text prevents massive hidden URL bloat
+            entry = f"• {text}"
+        else:
+            entry = f"• [{text}]({url})"
+            
+        if current_length + len(entry) + 1 > max_length:
+            break
+            
+        cleaned_links.append(entry)
+        current_length += len(entry) + 1
+
+    return "\n".join(cleaned_links)
 
 class GenAICog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -276,35 +311,44 @@ class GenAICog(commands.Cog):
             
         await ctx.defer()
         from utils.search import web_search
-        
-        results = await web_search(query)
-        
-        results = await web_search(query)
-        response = await safe_generate(
-            f"Summarize these search results:\n\n{results}",
-            current_persona=CURRENT_PERSONA,
-            apply_persona=False,
-            instruction_prefix=(
-                "Write in natural, flowing paragraphs. "
-                "Do not use bullet points or one-sentence sections. "
-                "Use **Bold Text** only for key terms. "
-                "Do not use markdown headers (#)."
+
+        result = await web_search(query)
+
+        # 1. Prepare the main description text
+        if result.has_sources:
+            text = result.text[:4096]
+        else:
+            response = await safe_generate(
+                f"Summarize these search results:\n\n{result.text}",
+                current_persona=CURRENT_PERSONA,
+                apply_persona=False,
+                instruction_prefix=(
+                    "Write in natural, flowing paragraphs. "
+                    "Do not use bullet points or one-sentence sections. "
+                    "Use **Bold Text** only for key terms. "
+                    "Do not use markdown headers (#)."
+                )
             )
-        )
-        
-        # This now pulls the raw, un-split text from the AI
-        text = response.first_text()
-        
+            text = response.first_text()[:4096]
+
+        # 2. Build the Embed
         embed = discord.Embed(
             title=f"Search: {query}",
-            description=text[:4096],
+            description=text or "No results found.",
             color=discord.Color.blue()
         )
-        
-        url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
-        embed.add_field(name="Full results", value=url, inline=False)
+
+        # 3. Add Sources or Fallback link
+        if result.has_sources:
+            # Clean the block before checking length to prevent broken markdown syntax
+            sources_text = clean_sources_block(result.sources_block(max=5))
+            embed.add_field(name="Sources", value=sources_text, inline=False)
+        else:
+            url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
+            embed.add_field(name="Full results", value=url, inline=False)
+
+        # 4. Finalize and Send
         embed.set_footer(text=embed_footer(ctx.author.display_name, query))
-        
         await ctx.send(embed=embed)
 
     # -------------------------------------------------------------------
@@ -499,7 +543,7 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     # /autonomy
     # -------------------------------------------------------------------
-    @app_commands.command(name="autonomy", description="Control autonomous mode (Admin only).")
+    @app_commands.command(name="autonomy", description="Configure autonomy mode settings (Admin only).")
     @app_commands.describe(
         action="on / off / frequency",
         frequency="low / default / high — only used when action is 'frequency'"
@@ -537,7 +581,6 @@ class GenAICog(commands.Cog):
             await interaction.response.send_message(
                 "Unknown action. Use `on`, `off`, or `frequency`.", ephemeral=True
             )
-
 
 async def setup(bot):
     await bot.add_cog(GenAICog(bot))

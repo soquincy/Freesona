@@ -2,6 +2,7 @@
 # discord.py: Interfaces with the Discord API.
 # discord.ext.commands: Provides tools to define and manage bot commands.
 # python-dotenv: Loads environment variables from a .env file.
+# pyyaml: Parses YAML specifically for dump_command.py to handle command data. (Used in development and debugging only)
 # re: Handles text parsing via regular expressions.
 # os: Accesses system-level environment variables.
 # asyncio: Enables asynchronous operations.
@@ -17,6 +18,7 @@
 
 discord.py
 python-dotenv
+pyyaml
 requests
 google-genai
 fastapi

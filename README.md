@@ -62,9 +62,8 @@ Create a `.env` file:
 BOT_TOKEN=YOUR_DISCORD_BOT_TOKEN
 CHANNEL_ID=YOUR_LOG_CHANNEL_ID
 GOOGLE_API_KEY=YOUR_GEMINI_API_KEY
+LOGOKIT_TOKEN=YOUR_LOGOKIT_KEY_HERE
 MODEL_NAME=gemini-flash-lite-latest
-GOOGLE_SEARCH_API_KEY=YOUR_GOOGLE_SEARCH_API_KEY
-SEARCH_ENGINE_ID=YOUR_GOOGLE_SEARCH_ENGINE_ID
 WOLFRAM_APPID_SHORT=YOUR_WOLFRAM_APPID_SHORT
 WOLFRAM_APPID_LLM=YOUR_WOLFRAM_APPID_LLM
 MVSEP_API_KEY=YOUR_MVSEP_API_KEY
@@ -169,6 +168,7 @@ Licensed under the **MIT License**. See [LICENSE](LICENSE).
 * Multi-provider support — swap AI providers without changing command code
 * Message claiming system for multi-instance deployments
 * RSS monitors — post matching feed items into selected channels
+* Optional generation logging — instance operators can enable local-only logs for abuse reporting and debugging; disabled by default, no data leaves the host
 
 ### Long-term
 
