@@ -59,36 +59,40 @@ git config core.hooksPath .githooks
 Create a `.env` file:
 
 ```dotenv
+# Discord + Gemini Model
 BOT_TOKEN=YOUR_DISCORD_BOT_TOKEN
 CHANNEL_ID=YOUR_LOG_CHANNEL_ID
 GOOGLE_API_KEY=YOUR_GEMINI_API_KEY
-LOGOKIT_TOKEN=YOUR_LOGOKIT_KEY_HERE
 MODEL_NAME=gemini-flash-lite-latest
+BOT_NAME=Freesona
+
+# Complimentary Tokens
+LOGOKIT_TOKEN=YOUR_LOGOKIT_KEY_HERE # for logos in RSS
+
+# Math Tokens
 WOLFRAM_APPID_SHORT=YOUR_WOLFRAM_APPID_SHORT
 WOLFRAM_APPID_LLM=YOUR_WOLFRAM_APPID_LLM
-MVSEP_API_KEY=YOUR_MVSEP_API_KEY
-BOT_NAME=Freesona
 
 # Local
 AI_PERSONA_FILE=persona.txt
 AI_PERSONA_JSON_FILE=persona.json
 AI_PERSONAS_FILE=personas.json
 CONFIG_FILE_PATH=config.json
-MEMORY_FILE_PATH=memory.json
+MEMORY_FILE_PATH=memory.db
 
-# Cloud (Railway/Render — requires /etc/secrets volume mount)
-# AI_PERSONA_FILE=/etc/secrets/persona.txt
-# AI_PERSONA_JSON_FILE=/etc/secrets/persona.json
-# AI_PERSONAS_FILE=/etc/secrets/personas.json
-# CONFIG_FILE_PATH=/etc/secrets/config.json
-# MEMORY_FILE_PATH=/etc/secrets/memory.json
+# Cloud (Railway/Render — requires /data volume mount)
+# AI_PERSONA_FILE=/data/persona.txt
+# AI_PERSONA_JSON_FILE=/data/persona.json
+# AI_PERSONAS_FILE=/data/personas.json
+# CONFIG_FILE_PATH=/data/config.json
+# MEMORY_FILE_PATH=/data/memory.json
 ```
 
 | Environment | Path prefix | Notes |
 | :--- | :--- | :--- |
 | **Local** | `./` | Files saved in project folder |
-| **Railway** | `/etc/secrets/` | Requires volume mounted to `/etc/secrets` |
-| **Render** | `/etc/secrets/` | Create files manually in environment page |
+| **Railway** | `/data/` | Requires volume mounted to `/data` |
+| **Render** | `/data/` | Create files manually in environment page |
 
 Without a persistent volume on cloud hosts, file changes won't survive a redeploy.
 
@@ -101,7 +105,7 @@ Without a persistent volume on cloud hosts, file changes won't survive a redeplo
 | `config.json` | Prefix, conversation channel, autonomy settings |
 | `persona.json` | Active persona fields |
 | `personas.json` | Saved persona presets |
-| `memory.json` | Long-term user facts, keyed by `guild_id:user_id` |
+| `memory.db` | Long-term user facts, keyed by `guild_id:user_id` |
 
 Short-term conversation memory is in-session only — cleared on restart or via `/clearmemory`.
 

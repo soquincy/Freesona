@@ -16,6 +16,7 @@ import urllib.parse
 from typing import Literal, Optional
 
 import discord
+import aiosqlite  # Fixed: Imported missing aiosqlite module
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -41,6 +42,7 @@ from utils.persona import (
 load_dotenv()
 
 BOT_NAME  = os.getenv("BOT_NAME", "Bot")
+MEMORY_FILE_PATH   = os.getenv("MEMORY_FILE_PATH", "memory.db")  # Fixed: Defined fallback database destination path
 
 logger = logging.getLogger("FreesonaBot")
 
@@ -118,6 +120,20 @@ class GenAICog(commands.Cog):
         )
         bot.tree.add_command(self.setpersona_command)
 
+    async def cog_load(self):
+        # Initialize SQLite database setup if missing
+        async with aiosqlite.connect(MEMORY_FILE_PATH) as db:
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS user_facts (
+                    message_id TEXT PRIMARY KEY,
+                    guild_id TEXT,
+                    user_id TEXT,
+                    content TEXT,
+                    importance REAL
+                )
+            """)
+            await db.commit()
+
     async def cog_unload(self):
         self.bot.tree.remove_command("setpersona")
         for task in _pending_responses.values():
@@ -129,9 +145,9 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        KONATA_ID = 1482682376655208548
+        WHITELIST_ID = 1482682376655208548          # this will no longer be hardcoded in the future
 
-        if message.author.bot and message.author.id != KONATA_ID:
+        if message.author.bot and message.author.id != WHITELIST_ID:
             return
         if message.guild is None:
             return
@@ -245,7 +261,7 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     # ~write
     # -------------------------------------------------------------------
-    @commands.hybrid_command(name='write', help='Ask the AI to write or create something.')
+    @commands.hybrid_command(name='write', aliases=['w'], help='Ask the AI to write or create something.')
     async def write_cmd(self, ctx, *, query: str):
         if ctx.guild is None:
             await ctx.send("AI commands are not available in DMs.")
@@ -275,7 +291,7 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     # ~ask
     # -------------------------------------------------------------------
-    @commands.hybrid_command(name='ask', help='Ask the AI a question.')
+    @commands.hybrid_command(name='ask', aliases=['a'], help='Ask the AI a question.')
     async def ask_cmd(self, ctx, *, query: str):
         if ctx.guild is None:
             await ctx.send("AI commands are not available in DMs.")
@@ -303,7 +319,7 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     # ~search
     # -------------------------------------------------------------------
-    @commands.hybrid_command(name='search', help='Search the web and summarize with AI.')
+    @commands.hybrid_command(name='search', aliases=['s'], help='Search the web and summarize with AI.')
     async def search_cmd(self, ctx, *, query: str):
         if ctx.guild is None:
             await ctx.send("AI commands are not available in DMs.")
@@ -354,14 +370,14 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     # Persona lock / unlock
     # -------------------------------------------------------------------
-    @commands.hybrid_command(name='personalock', help='Lock the persona to prevent changes (Owner only).')
+    @commands.hybrid_command(name='personalock', aliases=['plock'], help='Lock the persona to prevent changes (Owner only).')
     @commands.is_owner()
     async def persona_lock(self, ctx):
         import utils.persona as p
         p.PERSONA_LOCKED = True
         await ctx.send("Persona locked.", ephemeral=True if ctx.interaction else False)
 
-    @commands.hybrid_command(name='personaunlock', help='Unlock the persona (Owner only).')
+    @commands.hybrid_command(name='personaunlock', aliases=['pulock'], help='Unlock the persona (Owner only).')
     @commands.is_owner()
     async def persona_unlock(self, ctx):
         import utils.persona as p
@@ -371,7 +387,8 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     # Persona profiles
     # -------------------------------------------------------------------
-    @commands.hybrid_command(name='personasave', help='Save current persona as a named profile (Owner only).')
+    # Fixed: Updated raw string assignments to explicit array syntax format
+    @commands.hybrid_command(name='personasave', aliases=['psave'], help='Save current persona as a named profile (Owner only).')
     @commands.is_owner()
     async def persona_save(self, ctx, name: str):
         profiles = load_profiles()
@@ -379,7 +396,7 @@ class GenAICog(commands.Cog):
         save_profiles(profiles)
         await ctx.send(f"Saved persona as `{name.lower()}`.", ephemeral=True if ctx.interaction else False)
 
-    @commands.hybrid_command(name='personaload', help='Load a saved persona profile (Owner only).')
+    @commands.hybrid_command(name='personaload', aliases=['pload'], help='Load a saved persona profile (Owner only).')
     @commands.is_owner()
     async def persona_load(self, ctx, name: str):
         import utils.persona as p
@@ -401,7 +418,7 @@ class GenAICog(commands.Cog):
         save_persona_json(p.PERSONA_DATA)
         await ctx.send(f"Loaded persona `{key}`.", ephemeral=True if ctx.interaction else False)
 
-    @commands.hybrid_command(name='personalist', help='List saved persona profiles.')
+    @commands.hybrid_command(name='personalist', aliases=['plist'], help='List saved persona profiles.')
     @commands.is_owner()
     async def persona_list(self, ctx):
         profiles = load_profiles()
@@ -411,7 +428,7 @@ class GenAICog(commands.Cog):
         names = "\n".join(f"- `{k}`" for k in profiles)
         await ctx.send(names, ephemeral=True if ctx.interaction else False)
 
-    @commands.hybrid_command(name='personadelete', help='Delete a saved persona profile (Owner only).')
+    @commands.hybrid_command(name='personadelete', aliases=['pdel'], help='Delete a saved persona profile (Owner only).')
     @commands.is_owner()
     async def persona_delete(self, ctx, name: str):
         profiles = load_profiles()
@@ -426,7 +443,7 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     # /setchannel + /clearchannel
     # -------------------------------------------------------------------
-    @commands.hybrid_command(name='setchannel', help='Set the AI conversation channel (Admin only).')
+    @commands.hybrid_command(name='setchannel', aliases=['sc'], help='Set the AI conversation channel (Admin only).')
     @commands.has_permissions(administrator=True)
     async def set_channel(self, ctx, channel: discord.TextChannel):
         config = load_config()
@@ -434,7 +451,7 @@ class GenAICog(commands.Cog):
         save_config(config)
         await ctx.send(f"Conversation channel set to {channel.mention}.")
 
-    @commands.hybrid_command(name='clearchannel', help='Remove the AI conversation channel (Admin only).')
+    @commands.hybrid_command(name='clearchannel', aliases=['cc'], help='Remove the AI conversation channel (Admin only).')
     @commands.has_permissions(administrator=True)
     async def clear_channel(self, ctx):
         config = load_config()
@@ -445,7 +462,7 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     # /debugpersona
     # -------------------------------------------------------------------
-    @commands.hybrid_command(name='debugpersona', help='Show active persona and last prompt (Owner only).')
+    @commands.hybrid_command(name='debugpersona', aliases=['pdeb'], help='Show active persona and last prompt (Owner only).')
     @commands.is_owner()
     async def debug_persona(self, ctx):
         import utils.persona as p
@@ -467,53 +484,135 @@ class GenAICog(commands.Cog):
         await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
 
     # -------------------------------------------------------------------
-    # /clearmemory
+    # /clearmemory (Short-term)
     # -------------------------------------------------------------------
-    @commands.hybrid_command(name='clearmemory', help='Clear conversation memory for this channel (Admin only).')
+    @commands.hybrid_command(name='clearmemory', aliases=['smcl'], help='Clear conversation memory for this channel (Admin only).')
     @commands.has_permissions(administrator=True)
     async def clear_memory(self, ctx):
+        # We still use the global dicts for short-term/session memory
+        from utils.memory import channel_memory, channel_summary
         channel_memory.pop(ctx.channel.id, None)
         channel_summary.pop(ctx.channel.id, None)
-        await ctx.send("Memory cleared for this channel.")
+        await ctx.send("Short-term channel memory cleared.")
 
     # -------------------------------------------------------------------
-    # /memorylist + /memoryclear
+    # /memorylist (Long-term SQLite)
     # -------------------------------------------------------------------
-    @commands.hybrid_command(name='memorylist', help='List long-term memory facts for a user (Admin only).')
+    @commands.hybrid_command(name='memorylist', aliases=['meml'], help='List long-term memory facts for a user (Admin only).')
     @commands.has_permissions(administrator=True)
     async def memory_list(self, ctx, user: discord.User):
         if ctx.guild is None:
             await ctx.send("Memory commands are server-only.")
             return
 
-        facts = list_user_facts(ctx.guild.id, user.id)
-        if not facts:
-            await ctx.send(f"No long-term memory facts stored for {user.mention}.", ephemeral=True if ctx.interaction else False)
+        async with aiosqlite.connect(MEMORY_FILE_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT content, importance FROM user_facts WHERE guild_id = ? AND user_id = ? ORDER BY importance DESC",
+                (str(ctx.guild.id), str(user.id))
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+        if not rows:
+            await ctx.send(f"No long-term memory facts stored for {user.mention}.", ephemeral=True)
             return
 
-        lines = []
-        for idx, fact in enumerate(facts, start=1):
-            lines.append(f"{idx}. [{fact.importance:.2f}] {fact.content}")
-
+        lines = [f"{i}. [{r['importance']:.2f}] {r['content']}" for i, r in enumerate(rows, 1)]
+        
         embed = discord.Embed(
-            title=f"Memory: {getattr(user, 'display_name', user.name)}",
+            title=f"Memory: {user.display_name}",
             description="\n".join(lines)[:4096],
             color=discord.Color.purple(),
         )
-        await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
+        await ctx.send(embed=embed, ephemeral=True)
 
-    @commands.hybrid_command(name='memoryclear', help='Clear long-term memory facts for a user (Admin only).')
-    @commands.has_permissions(administrator=True)
-    async def memory_clear_user(self, ctx, user: discord.User):
+    # -------------------------------------------------------------------
+    # /memoryclear (Hybrid Permissions)
+    # -------------------------------------------------------------------
+    @commands.hybrid_command(
+        name='memoryclear',
+        aliases=['memcl'],
+        help='Clear long-term facts. Users can clear their own; Admins can clear anyone.'
+    )
+    @app_commands.describe(user="The user whose memory to clear (Defaults to you).")
+    async def memory_clear_user(self, ctx, user: Optional[discord.User] = None):
         if ctx.guild is None:
-            await ctx.send("Memory commands are server-only.")
+            return await ctx.send("Memory commands are server-only.")
+
+        target_user = user or ctx.author
+        is_admin = ctx.author.guild_permissions.administrator or ctx.author.guild_permissions.manage_guild
+        
+        # Security Check: Only allow non-admins to clear their OWN data
+        if target_user.id != ctx.author.id and not is_admin:
+            await ctx.send(
+                "❌ You do not have permission to clear other users' memory. You can only clear your own.", 
+                ephemeral=True
+            )
             return
 
-        removed = await clear_user_memory_async(ctx.guild.id, user.id)
-        if removed:
-            await ctx.send(f"Cleared long-term memory for {user.mention}.", ephemeral=True if ctx.interaction else False)
-        else:
-            await ctx.send(f"No long-term memory facts stored for {user.mention}.", ephemeral=True if ctx.interaction else False)
+        async with aiosqlite.connect(MEMORY_FILE_PATH) as db:
+            # Check for existence
+            async with db.execute(
+                "SELECT COUNT(*) FROM user_facts WHERE guild_id = ? AND user_id = ?", 
+                (str(ctx.guild.id), str(target_user.id))
+            ) as cursor:
+                count = (await cursor.fetchone())[0]
+
+            if count > 0:
+                await db.execute(
+                    "DELETE FROM user_facts WHERE guild_id = ? AND user_id = ?", 
+                    (str(ctx.guild.id), str(target_user.id))
+                )
+                await db.commit()
+                
+                msg = f"✅ Cleared {count} facts for {target_user.mention}."
+                if target_user.id == ctx.author.id:
+                    msg = f"✅ I have forgotten {count} facts about you in this server."
+                
+                await ctx.send(msg, ephemeral=True)
+            else:
+                await ctx.send(
+                    f"No long-term memory facts found for {target_user.display_name}.", 
+                    ephemeral=True
+                )
+
+
+    @commands.hybrid_command(name='memorydelete', aliases=['memdel'], help='Delete a specific fact by its number.')
+    async def memory_delete_index(self, ctx, index: int):
+        if ctx.guild is None: return
+
+        # 1. Fetch the user's facts ordered the same way as /memorylist
+        async with aiosqlite.connect(MEMORY_FILE_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT message_id, content FROM user_facts WHERE guild_id = ? AND user_id = ? ORDER BY importance DESC",
+                (str(ctx.guild.id), str(ctx.author.id))
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+        # 2. Check if the index is valid
+        if not rows or index < 1 or index > len(rows):
+            await ctx.send(f"Invalid number. Please use `/memorylist` to see your {len(rows)} stored facts.", ephemeral=True)
+            return
+
+        # 3. Delete the specific fact using its unique message_id
+        target_fact = rows[index - 1]
+        async with aiosqlite.connect(MEMORY_FILE_PATH) as db:
+            await db.execute("DELETE FROM user_facts WHERE message_id = ?", (target_fact['message_id'],))
+            await db.commit()
+
+        await ctx.send(f"✅ Deleted fact #{index}: *{target_fact['content'][:50]}...*", ephemeral=True)
+    
+    # -------------------------------------------------------------------
+    # /migrate (Manual JSON -> SQLite)
+    # -------------------------------------------------------------------
+    @commands.hybrid_command(name='migrate', help='Migrate JSON memory to SQLite (Admin only).')
+    @commands.has_permissions(administrator=True)
+    async def migrate_memory(self, ctx):
+        await ctx.defer(ephemeral=True)
+        from utils.memory import run_migration
+        success, message = await run_migration()
+        await ctx.send(f"{'✅' if success else '❌'} {message}", ephemeral=True)
 
     # -------------------------------------------------------------------
     # /chatmode
