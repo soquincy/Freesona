@@ -9,6 +9,9 @@ import re
 from datetime import datetime, timezone
 from google.genai import types
 
+from dotenv import load_dotenv
+load_dotenv()
+
 logger = logging.getLogger("FreesonaBot")
 
 # ---------------------------------------------------------------------------
@@ -27,6 +30,98 @@ FACT_EXTRACT_PROMPT = (
     '{"content": "<one concise fact>", "importance": <float 0.0-1.0>} '
     "or exactly: null"
 )
+
+# ---------------------------------------------------------------------------
+# Short-term memory (in-session, per channel)
+# ---------------------------------------------------------------------------
+
+from collections import deque
+from google.genai import types as _types
+
+MEMORY_LIMIT   = 5
+SUMMARY_PROMPT = "Summarize this conversation in 2-3 sentences, keeping key context only:"
+
+channel_memory:  dict[int, deque] = {}
+channel_summary: dict[int, str]   = {}
+
+
+def get_memory(channel_id: int) -> deque:
+    if channel_id not in channel_memory:
+        channel_memory[channel_id] = deque(maxlen=MEMORY_LIMIT)
+    return channel_memory[channel_id]
+
+
+def memory_to_contents(channel_id: int) -> list:
+    contents = []
+    content_usernames: dict[int, str] = {}
+    summary = channel_summary.get(channel_id)
+
+    if summary:
+        contents.append(_types.Content(
+            role="user",
+            parts=[_types.Part(text=f"[Conversation summary so far: {summary}]")]
+        ))
+        contents.append(_types.Content(
+            role="model",
+            parts=[_types.Part(text="Understood, I have context from earlier.")]
+        ))
+
+    for entry in get_memory(channel_id):
+        last_idx  = len(contents) - 1
+        last      = contents[last_idx] if contents else None
+        same_role = last is not None and last.role == entry["role"]
+        same_user = entry.get("username", "") == content_usernames.get(last_idx, "")
+
+        if same_role and same_user and last is not None:
+            merged_text = last.parts[0].text + f"\n{entry['text']}"
+            contents[last_idx] = _types.Content(
+                role=last.role,
+                parts=[_types.Part(text=merged_text)]
+            )
+        else:
+            contents.append(_types.Content(
+                role=entry["role"],
+                parts=[_types.Part(text=entry["text"])]
+            ))
+            content_usernames[len(contents) - 1] = entry.get("username", "")
+
+    return contents
+
+
+async def maybe_summarize(channel_id: int, client, model_name: str):
+    mem = get_memory(channel_id)
+    if len(mem) < MEMORY_LIMIT:
+        return
+    oldest = list(mem)[:MEMORY_LIMIT // 2]
+    block  = "\n".join(e["display"] for e in oldest)
+    prompt = f"{SUMMARY_PROMPT}\n\n{block}"
+    try:
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=model_name,
+            contents=[_types.Content(role="user", parts=[_types.Part(text=prompt)])],
+        )
+        if response and response.text:
+            prev = channel_summary.get(channel_id, "")
+            channel_summary[channel_id] = (prev + " " + response.text.strip()).strip()
+    except Exception as e:
+        logger.warning(f"Summary failed: {e}")
+
+
+def push_memory(channel_id: int, role: str, text: str, display: str = "", *, client=None, model_name: str = "", username: str = ""):
+    if client and model_name:
+        asyncio.create_task(maybe_summarize(channel_id, client, model_name))
+    get_memory(channel_id).append({
+        "role":     role,
+        "text":     text,
+        "display":  display or text,
+        "username": username,
+    })
+
+
+async def inject_user_memory(guild_id: int, user_id: int, display_name: str) -> str:
+    """Async wrapper around get_user_facts_prompt for use in generation.py."""
+    return await get_user_facts_prompt(guild_id, user_id, display_name)
 
 # ---------------------------------------------------------------------------
 # Database Core
@@ -156,8 +251,8 @@ async def run_migration():
                     ts = f.get('timestamp', datetime.now(timezone.utc).isoformat())
                     
                     await db.execute(
-                        "INSERT OR IGNORE INTO user_facts VALUES (?, ?, ?, ?, ?, ?)",
-                        (str(guild_id), str(user_id), f['content'], f['importance'], ts, str(m_id))
+                        "INSERT OR IGNORE INTO user_facts VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (str(guild_id), str(user_id), f['content'], f['importance'], ts, str(m_id), "0")
                     )
                     count += 1
             await db.commit()
