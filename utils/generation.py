@@ -5,7 +5,6 @@ import re
 import asyncio
 import logging
 import time
-import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -16,7 +15,7 @@ from google.genai import types
 
 from utils.memory import memory_to_contents, push_memory, inject_user_memory, extract_and_store_fact
 from utils.security import sanitize_prompt, unsafe_output
-from utils.config import LAST_DEBUG, get_model_name
+from utils.config import LAST_DEBUG
 
 load_dotenv()
 
@@ -24,6 +23,7 @@ logger = logging.getLogger("FreesonaBot")
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 BOT_NAME       = os.getenv("BOT_NAME", "Bot")
+MODEL_NAME     = "gemini-flash-lite-latest"
 
 # Split messaging
 SPLIT_MIN_LENGTH     = 280
@@ -56,17 +56,13 @@ class ConversationResponse:
     segments: list[MessageSegment] = field(default_factory=list)
     reactions: list[str] = field(default_factory=list)
     suggested_gif: Optional[str] = None
-    raw_text: str = ""  # Add this field to store the original output
 
     @property
     def is_empty(self) -> bool:
         return not self.segments
 
     def first_text(self) -> str:
-        # Return raw_text if available, otherwise fallback to joining segments
-        return self.raw_text if self.raw_text else "\n\n".join(s.text for s in self.segments)
-        # Join segments with double newlines to keep paragraph formatting
-        return "\n\n".join(s.text for s in self.segments if s.text.strip())
+        return " ".join(s.text for s in self.segments)
 
 # ---------------------------------------------------------------------------
 # Error classes
@@ -125,18 +121,26 @@ async def rate_limit():
 # Text splitter + response builder
 # ---------------------------------------------------------------------------
 
-def split_into_segments(text):
-    """
-    Splits text into segments while preserving paragraph breaks.
-    """
-    # Split by double newlines first to keep paragraph structure
-    paragraphs = text.split('\n\n')
-    all_segments = []
-    for para in paragraphs:
-        # Split each paragraph into sentences
-        sentences = re.split(r'(?<=[.!?])\s+', para)
-        all_segments.extend([s.strip() for s in sentences if s.strip()])
-    return all_segments
+def split_into_segments(text: str) -> list[str]:
+    if len(text) < SPLIT_MIN_LENGTH:
+        return [text]
+
+    paragraphs = [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
+    if len(paragraphs) <= 1:
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        chunks: list[str] = []
+        current = ""
+        for s in sentences:
+            if len(current) + len(s) > 220 and current:
+                chunks.append(current.strip())
+                current = s
+            else:
+                current = (current + " " + s).strip() if current else s
+        if current:
+            chunks.append(current.strip())
+        return chunks if len(chunks) > 1 else [text]
+
+    return paragraphs
 
 
 def build_response(text: str) -> ConversationResponse:
@@ -148,8 +152,7 @@ def build_response(text: str) -> ConversationResponse:
             SPLIT_DELAY_MAX
         )
         segments.append(MessageSegment(text=seg, delay=delay, typing=True))
-    # Pass the original text into raw_text
-    return ConversationResponse(segments=segments, raw_text=text)
+    return ConversationResponse(segments=segments)
 
 
 def clean_text(text: str, limit: int = 4000) -> str:
@@ -263,7 +266,7 @@ async def generate(
     # Inject long-term user memory into system prompt
     persona = current_persona if apply_persona else ""
     if apply_persona and guild_id and user_id:
-        memory_block = inject_user_memory(guild_id, user_id, username)
+        memory_block = await inject_user_memory(guild_id, user_id, username)
         if memory_block:
             persona = f"{current_persona}\n\n{memory_block}"
 
@@ -281,14 +284,13 @@ async def generate(
         LAST_DEBUG[channel_id] = user_text
 
     try:
-        model_name = get_model_name()
         config = types.GenerateContentConfig(
             system_instruction=persona if apply_persona else None,
             max_output_tokens=1024,
         )
         response = await asyncio.to_thread(
             client.models.generate_content,
-            model=model_name,
+            model=MODEL_NAME,
             contents=contents,
             config=config,
         )
@@ -308,9 +310,9 @@ async def generate(
             # already formatted as "Username: <prompt>" in generate(). For model turns
             # we keep the same convention with BOT_NAME as the speaker prefix.
             push_memory(channel_id, "user", display_text, display_text,
-                        client=client, model_name=model_name, username=username)
+                        client=client, model_name=MODEL_NAME, username=username)
             push_memory(channel_id, "model", f"{BOT_NAME}: {text}", f"{BOT_NAME}: {text}",
-                        client=client, model_name=model_name, username=BOT_NAME)
+                        client=client, model_name=MODEL_NAME, username=BOT_NAME)
 
         # Fire fact extraction async — never blocks response
         if guild_id and user_id and message_id and channel_id and prompt.strip():
@@ -322,7 +324,7 @@ async def generate(
                 message_id=message_id,
                 channel_id=channel_id,
                 client=client,
-                model_name=model_name,
+                model_name=MODEL_NAME,
             ))
 
         return build_response(text)

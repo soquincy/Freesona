@@ -15,6 +15,7 @@
 # uvicorn: ASGI server required to run FastAPI apps and handle HTTP requests.
 # aiohttp: Handles async HTTP requests, used in the Cobalt downloader cog.
 # yt-dlp: CLI tool for downloading YouTube/TikTok/Twitter videos.
+# aiosqlite: Handles databses for memory.db
 
 discord.py
 python-dotenv
@@ -25,3 +26,4 @@ fastapi
 uvicorn
 aiohttp
 yt-dlp
+aiosqlite
