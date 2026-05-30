@@ -17,6 +17,7 @@ OPTIONAL_MODULES = {
     "news": "cogs.news",
     "ytdlp": "cogs.ytdlp",
     "mvsep": "cogs.mvsep",
+    "random": "cogs.random",
 }
 
 DEFAULT_ENABLED_MODULES = {name: True for name in OPTIONAL_MODULES}
