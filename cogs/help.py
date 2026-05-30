@@ -74,11 +74,12 @@ class HelpCog(commands.Cog):
             }
 
             for cmd in self.bot.commands:
-                if cmd.hidden: continue
-                
+                if cmd.hidden:
+                    continue
+
                 entry = f"`{cmd.name}` - {cmd.help or 'No description'}"
-                
-                if cmd.name in ['hello', 'write', 'ask', 'today']:
+
+                if cmd.name in ['hello', 'write', 'ask', 'randommember', 'coinflip', 'roll', 'pick']:
                     cats["Fun"].append(entry)
                 elif cmd.name in ['kick', 'purge', 'removetimeout', 'timeout', 'ban', 'unban']:
                     cats["Moderation"].append(entry)
@@ -86,20 +87,25 @@ class HelpCog(commands.Cog):
                     cats["Utility"].append(entry)
                 elif cmd.name in ['download', 'audio', 'separate']:
                     cats["Media"].append(entry)
-                elif cmd.name in ['rss']:
+                elif cmd.name == 'rss':
                     cats["News"].append("`/rss list`, `/rss latest`, `/rss add`, `/rss setchannel`...")
                 elif cmd.name in [
-                    'personalock', 'personaunlock', 'personasave', 'personaload', 
-                    'personalist', 'personadelete', 'debugpersona', 'setchannel', 
-                    'clearchannel', 'clearmemory', 'chatmode', 'model', 'module'
+                    'personalock', 'personaunlock', 'personasave', 'personaload',
+                    'personalist', 'personadelete', 'debugpersona', 'setchannel',
+                    'clearchannel', 'clearmemory', 'memorylist', 'memorydelete',
+                    'migrate', 'chatmode', 'botwhitelist', 'model', 'module'
                 ]:
                     cats["AI Persona"].append(entry)
 
             # Format the categories into strings
             formatted_cats = {k: "\n".join(v) if v else "None" for k, v in cats.items()}
-            
+
             # Add the manual extras
-            formatted_cats["AI Persona"] += "\n`/setpersona` — Persona editor\n`/autonomy` — Auto-mode"
+            formatted_cats["AI Persona"] += (
+                "\n`/setpersona` — Persona editor\n"
+                "`/autonomy` — Auto-mode\n"
+                "`/botwhitelist` — Manage bot whitelist"
+            )
             formatted_cats["News"] = (
                 "`/rss list` — List feeds\n`/rss latest <name>` — Fetch articles\n"
                 "`/rss add <name> <url>` — Add feed\n`/rss setchannel <#ch>` — Auto-post"

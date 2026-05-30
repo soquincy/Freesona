@@ -711,7 +711,7 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     @commands.hybrid_group(name='botwhitelist', aliases=['bw'], help='Manage whitelisted bot IDs (Admin only).')
     @commands.has_permissions(administrator=True)
-    async def bot_whitelist(self, ctx):
+    async def whitelist_group(self, ctx):
         if ctx.invoked_subcommand is None:
             config = load_config()
             whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
@@ -721,7 +721,7 @@ class GenAICog(commands.Cog):
             lines = "\n".join(f"- `{bot_id}`" for bot_id in whitelist)
             await ctx.send(f"Whitelisted bots:\n{lines}", ephemeral=True if ctx.interaction else False)
 
-    @bot_whitelist.command(name='add', help='Add a bot ID to the whitelist.')
+    @whitelist_group.command(name='add', help='Add a bot ID to the whitelist.')
     async def whitelist_add(self, ctx, bot_id: int):
         config = load_config()
         whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
@@ -733,7 +733,7 @@ class GenAICog(commands.Cog):
         save_config(config)
         await ctx.send(f"Successfully added bot `{bot_id}` to the whitelist.", ephemeral=True if ctx.interaction else False)
 
-    @bot_whitelist.command(name='remove', help='Remove a bot ID from the whitelist.')
+    @whitelist_group.command(name='remove', help='Remove a bot ID from the whitelist.')
     async def whitelist_remove(self, ctx, bot_id: int):
         config = load_config()
         whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
