@@ -20,6 +20,7 @@ persona.json
 # User/private notes
 persona.txt
 pnotes.md
+ATTRIBUTION_FIXES.md
 
 # Tool caches
 .pytest_cache/

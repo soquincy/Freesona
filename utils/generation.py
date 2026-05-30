@@ -6,7 +6,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Union, Dict, Any
 
 import discord
 from dotenv import load_dotenv
@@ -243,7 +243,7 @@ async def extract_attachments(message: Optional[discord.Message]) -> list[tuple[
 # ---------------------------------------------------------------------------
 
 async def generate(
-    prompt: str,
+    prompt: Optional[Union[Dict[str, Any], str]],
     *,
     current_persona: str,
     channel_id: Optional[int] = None,
@@ -256,12 +256,34 @@ async def generate(
     attachments: Optional[list[tuple[bytes, str]]] = None,
 ) -> ConversationResponse:
     await rate_limit()
-    prompt = sanitize_prompt(prompt)
+    
+    # Handle structured payload (dict) vs raw string
+    if isinstance(prompt, dict):
+        role = prompt.get("role", "user")
+        text = prompt.get("content", "")
+        reply = prompt.get("reply")
+    else:
+        role = "user"
+        text = prompt or ""
+        reply = None
 
+    text = sanitize_prompt(text)
     contents = memory_to_contents(channel_id) if channel_id is not None else []
 
-    user_text = f"{instruction_prefix}\n\n{prompt}".strip() if instruction_prefix else prompt
-    display_text = f"{username}: {prompt}" if username else prompt
+    if reply:
+        ref_role = reply.get("role", "user")
+        api_role = "model" if ref_role == "model" else "user"
+        contents.append(types.Content(
+            role=api_role,
+            parts=[types.Part(
+                text=f"[reply from {reply['author']}]\n{reply['content']}"
+            )]
+        ))
+
+    user_text = f"{instruction_prefix}\n\n{text}".strip() if instruction_prefix else text
+    display_text = f"{username}: {text}" if username else text
+
+    parts = []
 
     # Inject long-term user memory into system prompt
     persona = current_persona if apply_persona else ""
@@ -270,7 +292,6 @@ async def generate(
         if memory_block:
             persona = f"{current_persona}\n\n{memory_block}"
 
-    parts = []
     if user_text:
         parts.append(types.Part(text=user_text))
     for att_bytes, att_mime in (attachments or []):
@@ -304,20 +325,16 @@ async def generate(
             logger.warning("Output blocked by safety filter.")
             return build_response("I can't respond to that.")
 
-        if channel_id is not None:
-            # Use display_text (username-prefixed) as the model-facing text so Gemini
-            # can distinguish between speakers in a multi-user channel. display_text is
-            # already formatted as "Username: <prompt>" in generate(). For model turns
-            # we keep the same convention with BOT_NAME as the speaker prefix.
-            push_memory(channel_id, "user", display_text, display_text,
+        if channel_id is not None and role in ("user", "webhook"):
+            push_memory(channel_id, role, display_text, display_text,
                         client=client, model_name=MODEL_NAME, username=username)
             push_memory(channel_id, "model", f"{BOT_NAME}: {text}", f"{BOT_NAME}: {text}",
                         client=client, model_name=MODEL_NAME, username=BOT_NAME)
 
-        # Fire fact extraction async — never blocks response
-        if guild_id and user_id and message_id and channel_id and prompt.strip():
+        # Fire fact extraction async — only for user messages (role="user")
+        if guild_id and user_id and message_id and channel_id and text.strip() and role == "user":
             asyncio.create_task(extract_and_store_fact(
-                message_content=prompt,
+                message_content=text,
                 display_name=username,
                 guild_id=guild_id,
                 user_id=user_id,
@@ -338,7 +355,7 @@ async def generate(
 
 
 async def safe_generate(
-    prompt: str,
+    prompt: Optional[Union[Dict[str, Any], str]],
     *,
     current_persona: str,
     attachments: Optional[list[tuple[bytes, str]]] = None,

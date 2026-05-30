@@ -27,6 +27,7 @@ from utils.generation import (
     safe_generate, send_response, extract_attachments,
     ConversationResponse, build_response,
 )
+from utils.roles import resolve_message_role
 from utils.memory import channel_memory, channel_summary, extract_and_store_fact, get_user_facts_prompt
 from utils.intent import evaluate_intent, FREQUENCY_THRESHOLD, INTENT_IGNORE
 from utils.persona import (
@@ -98,6 +99,9 @@ def clean_sources_block(sources_text: str, max_length: int = 1024) -> str:
     return "\n".join(cleaned_links)
 
 
+# (resolve_message_role has been moved to utils/roles.py)
+
+
 class GenAICog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -125,8 +129,6 @@ class GenAICog(commands.Cog):
     async def on_message(self, message: discord.Message):
         WHITELIST_ID = 1482682376655208548
 
-        if message.author.bot and message.author.id != WHITELIST_ID:
-            return
         if message.guild is None:
             return
         if message.type not in (discord.MessageType.default, discord.MessageType.reply):
@@ -142,6 +144,19 @@ class GenAICog(commands.Cog):
         ctx = await self.bot.get_context(message)
         if ctx.valid:
             return
+
+        bot_id = self.bot.user.id if self.bot.user else 0
+        if message.author.id == bot_id:
+            return  # Hard stop reprocessing own output
+
+        WHITELIST_ID = 1482682376655208548
+        is_whitelisted = message.author.id == WHITELIST_ID
+
+        # Ingestion filter: Ignore external bots unless they are whitelisted or webhooks
+        if message.author.bot and not message.webhook_id and message.author.id != WHITELIST_ID:
+            return
+
+        role = resolve_message_role(message, bot_id)
 
         config = load_config()
 
@@ -160,13 +175,25 @@ class GenAICog(commands.Cog):
             message_snapshot  = message
             guild_id_snapshot = message.guild.id
 
-            reply_context = ""
+            # Create structured payload with role boundaries preserved
+            payload = {
+                "role": role,
+                "author_id": user_id,
+                "username": username_snapshot,
+                "content": message.content,
+                "reply": None
+            }
+
             if message.reference and isinstance(message.reference.resolved, discord.Message):
                 ref = message.reference.resolved
-                if ref.content:
-                    reply_context = f"[replying to {ref.author.display_name}: {ref.content}]\n"
-
-            content_snapshot = reply_context + message.content
+                payload["reply"] = {
+                    "author": ref.author.display_name,
+                    "author_id": ref.author.id,
+                    "content": ref.content or "",
+                    "is_bot": ref.author.bot,
+                    "is_webhook": ref.webhook_id is not None,
+                    "role": resolve_message_role(ref, bot_id)
+                }
 
             if user_id in _pending_responses:
                 _pending_responses[user_id].cancel()
@@ -177,7 +204,7 @@ class GenAICog(commands.Cog):
                     await asyncio.sleep(DEBOUNCE_SECONDS)
                     attachments = await extract_attachments(message_snapshot)
                     response = await safe_generate(
-                        content_snapshot or "What's in this image?",
+                        payload,
                         current_persona=CURRENT_PERSONA,
                         channel_id=channel_snapshot.id,
                         guild_id=guild_id_snapshot,
@@ -200,7 +227,8 @@ class GenAICog(commands.Cog):
         # -------------------------------------------------------------------
         autonomy_on = config.get("autonomy", False)
 
-        if autonomy_on and not message.author.bot:
+        # Only autonomy fires for user messages (not bot messages)
+        if autonomy_on and role == "user":
             frequency    = config.get("autonomy_frequency", "default")
             threshold    = FREQUENCY_THRESHOLD.get(frequency, 0.50)
             now          = time.time()
@@ -222,9 +250,30 @@ class GenAICog(commands.Cog):
                         f"confidence={intent.confidence:.2f} intent={intent.intent} "
                         f"targets={intent.targets}"
                     )
+                    
+                    # Create structured payload for autonomy
+                    payload = {
+                        "role": role,
+                        "author_id": message.author.id,
+                        "username": message.author.display_name,
+                        "content": message.content,
+                        "reply": None
+                    }
+                    
+                    if message.reference and isinstance(message.reference.resolved, discord.Message):
+                        ref = message.reference.resolved
+                        payload["reply"] = {
+                            "author": ref.author.display_name,
+                            "author_id": ref.author.id,
+                            "content": ref.content or "",
+                            "is_bot": ref.author.bot,
+                            "is_webhook": ref.webhook_id is not None,
+                            "role": resolve_message_role(ref, bot_id)
+                        }
+                    
                     attachments = await extract_attachments(message)
                     response = await safe_generate(
-                        message.content,
+                        payload,
                         current_persona=CURRENT_PERSONA,
                         channel_id=message.channel.id,
                         guild_id=message.guild.id,
