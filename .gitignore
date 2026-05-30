@@ -16,7 +16,6 @@ ENV/
 # Runtime / bot state
 memory.json
 persona.json
-personas.json
 
 # User/private notes
 persona.txt

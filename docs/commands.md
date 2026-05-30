@@ -81,3 +81,12 @@ Autonomous mode uses a confidence-scored intent evaluator (not random chance). T
 | `~audio <url>` | Download audio as MP3 | Anyone |
 | `~ping` | Show bot and Discord API latency | Anyone |
 | `~hello` | Says hello | Anyone |
+
+## Random
+
+| Command                         | Action                                      | Permissions |
+| :------------------------------ | :------------------------------------------ | :---------- |
+| `~randommember`                 | Randomly selects a server member            | Anyone      |
+| `~coinflip`                     | Flips a coin                                | Anyone      |
+| `~roll [sides]`                 | Rolls a die (default: 6 sides)              | Anyone      |
+| `~pick <choice1, choice2, ...>` | Randomly picks from comma-separated choices | Anyone      |
