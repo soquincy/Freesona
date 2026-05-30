@@ -149,16 +149,14 @@ class GenAICog(commands.Cog):
         if message.author.id == bot_id:
             return  # Hard stop reprocessing own output
 
-        WHITELIST_ID = 1482682376655208548
-        is_whitelisted = message.author.id == WHITELIST_ID
+        config = load_config()
+        whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
 
         # Ingestion filter: Ignore external bots unless they are whitelisted or webhooks
-        if message.author.bot and not message.webhook_id and message.author.id != WHITELIST_ID:
+        if message.author.bot and not message.webhook_id and message.author.id not in whitelist:
             return
 
         role = resolve_message_role(message, bot_id)
-
-        config = load_config()
 
         # -------------------------------------------------------------------
         # Conversation channel
@@ -516,28 +514,36 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     # /memorylist (long-term SQLite)
     # -------------------------------------------------------------------
-    @commands.hybrid_command(name='memorylist', aliases=['meml'], help='List long-term memory facts for a user (Admin only).')
-    @commands.has_permissions(administrator=True)
-    async def memory_list(self, ctx, user: discord.User):
+    @commands.hybrid_command(name='memorylist', aliases=['meml'], help='List long-term memory facts for a user.')
+    @app_commands.describe(user="The user whose memory to list (defaults to you).")
+    async def memory_list(self, ctx, user: Optional[discord.User] = None):
         if ctx.guild is None:
             await ctx.send("Memory commands are server-only.")
+            return
+
+        target_user = user or ctx.author
+        member = ctx.guild.get_member(ctx.author.id) if ctx.guild else None
+        is_admin = bool(member and (member.guild_permissions.administrator or member.guild_permissions.manage_guild))
+
+        if target_user.id != ctx.author.id and not is_admin:
+            await ctx.send("❌ You can only view your own memory.", ephemeral=True)
             return
 
         async with aiosqlite.connect(MEMORY_FILE_PATH) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(
                 "SELECT content, importance FROM user_facts WHERE guild_id = ? AND user_id = ? ORDER BY importance DESC",
-                (str(ctx.guild.id), str(user.id))
+                (str(ctx.guild.id), str(target_user.id))
             ) as cursor:
                 rows = await cursor.fetchall()
 
         if not rows:
-            await ctx.send(f"No long-term memory facts stored for {user.mention}.", ephemeral=True)
+            await ctx.send(f"No long-term memory facts stored for {target_user.mention}.", ephemeral=True)
             return
 
         lines = [f"{i}. [{r['importance']:.2f}] {r['content']}" for i, r in enumerate(rows, 1)]
         embed = discord.Embed(
-            title=f"Memory: {user.display_name}",
+            title=f"Memory: {target_user.display_name}",
             description="\n".join(lines)[:4096],
             color=discord.Color.purple(),
         )
@@ -589,19 +595,31 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     # /memorydelete
     # -------------------------------------------------------------------
-    @commands.hybrid_command(name='memorydelete', aliases=['memdel'], help='Delete a specific fact by its number.')
-    async def memory_delete_index(self, ctx, index: int):
+    @commands.hybrid_command(name='memorydelete', aliases=['memdel'], help='Delete a specific memory fact by its list number.')
+    @app_commands.describe(index="The list number of the fact to delete.", user="The user whose memory to delete (defaults to you).")
+    async def memory_delete_index(self, ctx, index: int, user: Optional[discord.User] = None):
         if ctx.guild is None:
+            return
+
+        target_user = user or ctx.author
+        member = ctx.guild.get_member(ctx.author.id) if ctx.guild else None
+        is_admin = bool(member and (member.guild_permissions.administrator or member.guild_permissions.manage_guild))
+
+        if target_user.id != ctx.author.id and not is_admin:
+            await ctx.send("❌ You can only delete your own memory facts.", ephemeral=True)
             return
 
         async with aiosqlite.connect(MEMORY_FILE_PATH) as db:
             db.row_factory = aiosqlite.Row
 
-            async with db.execute(...) as cursor:
-                rows: list = list(await cursor.fetchall())  # convert to list
+            async with db.execute(
+                "SELECT message_id, content FROM user_facts WHERE guild_id = ? AND user_id = ? ORDER BY importance DESC",
+                (str(ctx.guild.id), str(target_user.id))
+            ) as cursor:
+                rows: list = list(await cursor.fetchall())
 
             if not rows or index < 1 or index > len(rows):
-                await ctx.send(f"Invalid number. Use `/memorylist` to see your {len(rows)} stored facts.", ephemeral=True)
+                await ctx.send(f"Invalid number. Use `/memorylist` to see the {len(rows)} stored facts.", ephemeral=True)
                 return
 
         target_fact = rows[index - 1]
@@ -609,7 +627,7 @@ class GenAICog(commands.Cog):
             await db.execute("DELETE FROM user_facts WHERE message_id = ?", (target_fact['message_id'],))
             await db.commit()
 
-        await ctx.send(f"✅ Deleted fact #{index}: *{target_fact['content'][:50]}...*", ephemeral=True)
+        await ctx.send(f"✅ Deleted fact #{index} for {target_user.display_name}: *{target_fact['content'][:50]}...*", ephemeral=True)
 
     # -------------------------------------------------------------------
     # /migrate
@@ -687,6 +705,45 @@ class GenAICog(commands.Cog):
             await interaction.response.send_message(
                 "Unknown action. Use `on`, `off`, or `frequency`.", ephemeral=True
             )
+
+    # -------------------------------------------------------------------
+    # /botwhitelist add / remove / list
+    # -------------------------------------------------------------------
+    @commands.hybrid_group(name='botwhitelist', aliases=['bw'], help='Manage whitelisted bot IDs (Admin only).')
+    @commands.has_permissions(administrator=True)
+    async def bot_whitelist(self, ctx):
+        if ctx.invoked_subcommand is None:
+            config = load_config()
+            whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
+            if not whitelist:
+                await ctx.send("No bots are whitelisted.", ephemeral=True if ctx.interaction else False)
+                return
+            lines = "\n".join(f"- `{bot_id}`" for bot_id in whitelist)
+            await ctx.send(f"Whitelisted bots:\n{lines}", ephemeral=True if ctx.interaction else False)
+
+    @bot_whitelist.command(name='add', help='Add a bot ID to the whitelist.')
+    async def whitelist_add(self, ctx, bot_id: int):
+        config = load_config()
+        whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
+        if bot_id in whitelist:
+            await ctx.send(f"Bot `{bot_id}` is already whitelisted.", ephemeral=True if ctx.interaction else False)
+            return
+        whitelist.append(bot_id)
+        config["whitelist_bot_ids"] = whitelist
+        save_config(config)
+        await ctx.send(f"Successfully added bot `{bot_id}` to the whitelist.", ephemeral=True if ctx.interaction else False)
+
+    @bot_whitelist.command(name='remove', help='Remove a bot ID from the whitelist.')
+    async def whitelist_remove(self, ctx, bot_id: int):
+        config = load_config()
+        whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
+        if bot_id not in whitelist:
+            await ctx.send(f"Bot `{bot_id}` is not in the whitelist.", ephemeral=True if ctx.interaction else False)
+            return
+        whitelist.remove(bot_id)
+        config["whitelist_bot_ids"] = whitelist
+        save_config(config)
+        await ctx.send(f"Successfully removed bot `{bot_id}` from the whitelist.", ephemeral=True if ctx.interaction else False)
 
 
 async def setup(bot):

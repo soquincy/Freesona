@@ -163,9 +163,9 @@ Licensed under the **MIT License**. See [LICENSE](LICENSE).
 
 ### Short-term
 
-* Persona gallery in the wiki
-* Per-fact memory controls — delete or edit one remembered fact without clearing the user
-* RSS feed presets for reliable wire/news sources as public feeds are confirmed
+* [x] Persona gallery in the wiki (completed via `personas.json` presets)
+* [x] Per-fact memory controls — delete or edit one remembered fact without clearing the user (completed via `/memorylist` and `/memorydelete`)
+* [x] RSS feed presets for reliable wire/news sources as public feeds are confirmed (completed via `npr-news` and verified presets in `utils/rss.py`)
 
 ### Medium-term
 

@@ -16,7 +16,7 @@ RSS_DISABLED_KEY = "rss_disabled"   # built-in feeds the user has explicitly rem
 DEFAULT_RSS_FEEDS: dict[str, str] = {
     "bbc-world":  "https://feeds.bbci.co.uk/news/world/rss.xml",
     "bbc-tech":   "https://feeds.bbci.co.uk/news/technology/rss.xml",
-    "ap-world":   "https://rss.app/feeds/Ul6tmWMDMgxBOBmv.xml",
+    "npr-news":   "https://feeds.npr.org/1001/rss.xml",
     "aljazeera":  "https://www.aljazeera.com/xml/rss/all.xml",
     "dw-world":   "https://rss.dw.com/rdf/rss-en-all",
 }
