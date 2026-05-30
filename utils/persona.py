@@ -6,7 +6,7 @@ import logging
 from typing import Optional
 
 import discord
-from discord import ui
+from discord import ui, app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -83,11 +83,19 @@ def save_persona_json(data: dict):
 
 
 def assemble_persona(data: dict) -> str:
+    xml_tags = {
+        "system_instructions": "system_instructions",
+        "core_personality":    "role",
+        "background":          "background",
+        "beliefs":             "beliefs",
+        "language":            "language",
+    }
     parts = []
     for f in ASSEMBLY_ORDER:
-        label = PERSONA_LABELS[f]
+        tag   = xml_tags[f]
         value = data.get(f, "").strip()
-        parts.append(f"[{label}]\n{value}" if value else f"[{label}]\n(empty)")
+        if value:
+            parts.append(f"<{tag}>\n{value}\n</{tag}>")
     return "\n\n".join(parts)
 
 
@@ -179,7 +187,7 @@ class PersonaCoreModal(ui.Modal, title="Persona: Core & Background"):
         try:
             save_persona_json(PERSONA_DATA)
             await interaction.response.send_message(
-                "Core and background saved. Use `/setpersona` to edit the full persona.",
+                "✅ Core & Background saved. Use `/setpersona style` for the remaining fields.",
                 ephemeral=True
             )
         except Exception as e:
@@ -226,10 +234,40 @@ class PersonaStyleModal(ui.Modal, title="Persona: Style & Instructions"):
         CURRENT_PERSONA = assemble_persona(PERSONA_DATA)
         try:
             save_persona_json(PERSONA_DATA)
-            await interaction.response.send_message("Style and instructions saved.", ephemeral=True)
+            await interaction.response.send_message("✅ Style & Instructions saved.", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"Save failed: {e}", ephemeral=True)
 
+
+# ---------------------------------------------------------------------------
+# /setpersona command group
+# ---------------------------------------------------------------------------
+
+class SetPersonaGroup(app_commands.Group):
+    def __init__(self):
+        super().__init__(name="setpersona", description="Edit the bot's persona (Owner only).")
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        bot = interaction.client
+        if isinstance(bot, commands.Bot):
+            if not await bot.is_owner(interaction.user):
+                await interaction.response.send_message("Owner only.", ephemeral=True)
+                return False
+            return True
+        await interaction.response.send_message("Owner check failed.", ephemeral=True)
+        return False
+
+    @app_commands.command(name="core", description="Edit core personality and background.")
+    async def set_core(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(PersonaCoreModal(PERSONA_DATA))
+
+    @app_commands.command(name="style", description="Edit beliefs, language style, and system instructions.")
+    async def set_style(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(PersonaStyleModal(PERSONA_DATA))
+
+# ---------------------------------------------------------------------------
+# Panel UI (replaces SetPersonaGroup slash command group)
+# ---------------------------------------------------------------------------
 
 class PersonaFullModal(ui.Modal, title="Persona Editor"):
     core_personality = ui.TextInput(
@@ -273,11 +311,9 @@ class PersonaFullModal(ui.Modal, title="Persona Editor"):
         if PERSONA_LOCKED:
             await interaction.response.send_message("Persona is locked. Use `/personaunlock` first.", ephemeral=True)
             return
-
         for field_name in PERSONA_FIELDS:
             PERSONA_DATA[field_name] = getattr(self, field_name).value.strip()
         CURRENT_PERSONA = assemble_persona(PERSONA_DATA)
-
         try:
             save_persona_json(PERSONA_DATA)
             await interaction.response.send_message("Persona saved.", ephemeral=True)
@@ -327,7 +363,6 @@ async def open_persona_panel(interaction: discord.Interaction):
     if not await bot.is_owner(interaction.user):
         await interaction.response.send_message("Owner only.", ephemeral=True)
         return
-
     embed = discord.Embed(
         title="Persona Editor",
         description="Use the buttons below to edit, preview, or check the active persona.",
@@ -335,10 +370,3 @@ async def open_persona_panel(interaction: discord.Interaction):
     )
     embed.add_field(name="Fields", value="\n".join(PERSONA_LABELS[f] for f in PERSONA_FIELDS), inline=False)
     await interaction.response.send_message(embed=embed, view=PersonaPanelView(bot), ephemeral=True)
-
-
-# ---------------------------------------------------------------------------
-# Compatibility aliases for older imports
-# ---------------------------------------------------------------------------
-
-SetPersonaGroup = None
