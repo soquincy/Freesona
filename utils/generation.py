@@ -273,10 +273,20 @@ async def generate(
     if reply:
         ref_role = reply.get("role", "user")
         api_role = "model" if ref_role == "model" else "user"
+        # Clarify addressing rules to the model: always address the most recent message
+        # (the one that triggered the bot) rather than the quoted message's author,
+        # unless the user explicitly asks otherwise.
+        clarification = (
+            "When replying to a message that quotes or replies to another user's message, "
+            "address the author of the most recent message (the one who triggered the bot). "
+            "Do not attack, blame, or assume intent about the quoted message's author unless "
+            "explicitly requested by the user."
+        )
+        contents.append(types.Content(role="system", parts=[types.Part(text=clarification)]))
         contents.append(types.Content(
             role=api_role,
             parts=[types.Part(
-                text=f"[reply from {reply['author']}]\n{reply['content']}"
+                text=f"[quoted from {reply['author']}]\n{reply['content']}"
             )]
         ))
 
