@@ -15,7 +15,7 @@ BOT_NAME = os.getenv("BOT_NAME", "Bot")
 
 class HelpView(discord.ui.View):
     def __init__(self, bot, ctx, categories, prefix):
-        super().__init__(timeout=60)
+        super().__init__(timeout=None)
         self.bot = bot
         self.ctx = ctx
         self.categories = categories
@@ -122,18 +122,41 @@ class HelpCog(commands.Cog):
             await ctx.send(embed=embed, view=view)
 
         else:
-            # Individual command help (same as your original logic)
-            command = self.bot.get_command(command_name.lower())
+            # Individual command help: support both prefix commands and app commands
+            search_name = command_name.lower().lstrip("/")
+            command = self.bot.get_command(search_name)
             if command and not command.hidden:
                 embed = discord.Embed(
                     title=f"Help: `{prefix}{command.name}`",
                     description=command.help or "No description provided.",
                     color=discord.Color.green()
                 )
-                # ... (rest of your existing individual command logic)
                 await ctx.send(embed=embed)
-            else:
-                await ctx.send(f"No command named `{command_name}` found.")
+                return
 
+            app_command = self.find_app_command(search_name)
+            if app_command:
+                embed = discord.Embed(
+                    title=f"Help: `/{app_command.name}`",
+                    description=app_command.description or "No description provided.",
+                    color=discord.Color.green()
+                )
+                await ctx.send(embed=embed)
+                return
+
+            await ctx.send(f"No command named `{command_name}` found.")
+
+    def find_app_command(self, name: str):
+        name = name.lstrip("/").lower()
+        tree = self.bot.tree
+        walker = getattr(tree, "walk_commands", None)
+        if walker is not None:
+            for cmd in tree.walk_commands():
+                if cmd.name == name:
+                    return cmd
+        commands_map = getattr(tree, "_commands", None)
+        if isinstance(commands_map, dict):
+            return commands_map.get(name)
+        return None
 async def setup(bot):
     await bot.add_cog(HelpCog(bot))
