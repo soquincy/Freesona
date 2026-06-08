@@ -13,6 +13,8 @@ class RandomCog(commands.Cog):
         name='randommember',
         help='Randomly selects a server member.'
     )
+    @commands.has_permissions(manage_guild=True)
+    @commands.cooldown(1, 60, commands.BucketType.guild)
     async def random_member_cmd(self, ctx):
         members = [member for member in ctx.guild.members if not member.bot]
 

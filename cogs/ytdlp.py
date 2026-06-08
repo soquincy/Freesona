@@ -201,6 +201,8 @@ class YtDlp(commands.Cog):
             "--audio-format", "mp3",
             "--audio-quality", "5",
             "--no-playlist",
+            "--remote-components",
+            "ejs:github",
             *self._cookies_for(url),
             "-o", output_template,
             url,
@@ -236,6 +238,8 @@ class YtDlp(commands.Cog):
                 "--audio-multistreams",
                 "--postprocessor-args", "ffmpeg:-c:a aac",
                 "--no-playlist",
+                "--remote-components",
+                "ejs:github",
                 "-o", output_template,
                 url,
             )

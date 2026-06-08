@@ -30,8 +30,7 @@ class UtilCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # Kick comamnd
-    @commands.hybrid_command(name='kick', help='Kicks a member from the server.') # Deadass?
+    @commands.hybrid_command(name='kick', help='Kicks a member from the server.', usage='<member> [reason]')
     @app_commands.describe(member="The member to kick.", reason="Reason for the kick.")
     @commands.has_permissions(kick_members=True)
     @commands.bot_has_permissions(kick_members=True)
@@ -57,14 +56,12 @@ class UtilCog(commands.Cog):
         except discord.Forbidden:
             await ctx.send("I don't have permission to kick this member.")
 
-    # Purge (mass delete messages) command
-    @commands.hybrid_command(name='purge', help='Deletes a specified number of messages (1-1000).')
-    # Note: cannot delete messages older than 14 days due to Discord limitations, but that is handled by the API and doesn't need to be checked for manually.
+    @commands.hybrid_command(name='purge', help='Deletes a specified number of messages (1-1000).', usage='<amount>')
     @app_commands.describe(amount="The number of messages to delete (1-1000).")
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_messages=True)
     async def purge_cmd(self, ctx, amount: int):
-        await ctx.defer(ephemeral=True) # Ephemeral so the 'thinking' state is private
+        await ctx.defer(ephemeral=True)
         if 1 <= amount <= 1000:
             try:
                 deleted = await ctx.channel.purge(limit=amount + 1)
@@ -75,8 +72,7 @@ class UtilCog(commands.Cog):
         else:
             await ctx.send("Please provide a number between 1 and 1000.")
 
-    # Ban command
-    @commands.hybrid_command(name='ban', help='Bans a member from the server.')
+    @commands.hybrid_command(name='ban', help='Bans a member from the server.', usage='<member> [reason]')
     @app_commands.describe(member="The user to ban.", reason="Why are they being banned?")
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
@@ -106,8 +102,7 @@ class UtilCog(commands.Cog):
         except discord.Forbidden:
             await ctx.send("I don't have permission to ban this user.")
 
-    # Unban command
-    @commands.hybrid_command(name='unban', help='Unbans a user from the server.')
+    @commands.hybrid_command(name='unban', help='Unbans a user from the server.', usage='<user> [reason]')
     @app_commands.describe(user="The user to unban (ID or user#tag).", reason="Reason for the unban.")
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
@@ -126,8 +121,7 @@ class UtilCog(commands.Cog):
         except discord.Forbidden:
             await ctx.send("I don't have permission to unban this user.")
 
-    # Timeout command
-    @commands.hybrid_command(name='timeout', aliases=['to'], help='Times out a member.')
+    @commands.hybrid_command(name='timeout', aliases=['to'], help='Times out a member.', usage='<member> <duration> [reason]')
     @app_commands.describe(
         member="The member to timeout.",
         length="Duration (e.g. 10m, 1h).",
@@ -137,7 +131,7 @@ class UtilCog(commands.Cog):
     @commands.bot_has_permissions(moderate_members=True)
     async def timeout_cmd(self, ctx, member: discord.Member, length: str, *, reason: str = "No reason provided"):
         await ctx.defer()
-        
+
         delta = parse_time_string(length)
         if not delta:
             await ctx.send("Invalid format. Use `10s`, `5m`, `1h`, etc.")
@@ -149,8 +143,7 @@ class UtilCog(commands.Cog):
         except discord.Forbidden:
             await ctx.send("I can't timeout that member.")
 
-    # Removetimeout command 
-    @commands.hybrid_command(name='removetimeout', aliases=['rt', 'rto'], help='Removes a timeout from a member.')
+    @commands.hybrid_command(name='removetimeout', aliases=['rt', 'rto'], help='Removes a timeout from a member.', usage='<member>')
     @app_commands.describe(member="The member to remove timeout.")
     @commands.has_permissions(moderate_members=True)
     @commands.bot_has_permissions(moderate_members=True)
@@ -162,9 +155,6 @@ class UtilCog(commands.Cog):
 
         await member.timeout(None, reason=f"Removed by {ctx.author}")
         await ctx.send(f"Removed timeout for {member.mention}.")
-
-# It is what it is: the most basic utility commands that every bot should have.
-# Kick, ban, unban, timeout, removetimeout, purge, whatever. All with proper permission checks and error handling.
 
 async def setup(bot):
     await bot.add_cog(UtilCog(bot))

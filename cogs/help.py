@@ -67,9 +67,8 @@ class HelpCog(commands.Cog):
             prefix = prefix(self.bot, ctx.message)
 
         if not command_name:
-            # Build the command strings
             cats = {
-                "Fun": [], "Moderation": [], "Utility": [], 
+                "Fun": [], "Moderation": [], "Utility": [],
                 "Media": [], "AI Persona": [], "News": []
             }
 
@@ -97,10 +96,8 @@ class HelpCog(commands.Cog):
                 ]:
                     cats["AI Persona"].append(entry)
 
-            # Format the categories into strings
             formatted_cats = {k: "\n".join(v) if v else "None" for k, v in cats.items()}
 
-            # Add the manual extras
             formatted_cats["AI Persona"] += (
                 "\n`/setpersona` — Persona editor\n"
                 "`/autonomy` — Auto-mode\n"
@@ -117,20 +114,28 @@ class HelpCog(commands.Cog):
                 color=discord.Color.blue()
             )
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-            
+
             view = HelpView(self.bot, ctx, formatted_cats, prefix)
             await ctx.send(embed=embed, view=view)
 
         else:
-            # Individual command help: support both prefix commands and app commands
             search_name = command_name.lower().lstrip("/")
             command = self.bot.get_command(search_name)
             if command and not command.hidden:
+                was_alias = search_name != command.name
+                title = f"Help: `{prefix}{command.name}`"
+                if was_alias:
+                    title += f" (alias: `{prefix}{search_name}`)"
+
                 embed = discord.Embed(
-                    title=f"Help: `{prefix}{command.name}`",
+                    title=title,
                     description=command.help or "No description provided.",
                     color=discord.Color.green()
                 )
+                if command.usage:
+                    embed.add_field(name="Usage", value=f"`{prefix}{command.name} {command.usage}`", inline=False)
+                if command.aliases:
+                    embed.add_field(name="Aliases", value=", ".join(f"`{prefix}{a}`" for a in command.aliases), inline=False)
                 await ctx.send(embed=embed)
                 return
 
