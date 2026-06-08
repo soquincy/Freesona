@@ -124,6 +124,30 @@ async def on_ready():
     except Exception as e:
         logger.warning(f"Legacy check failed: {e}")
 
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        cmd = ctx.command
+        prefix = ctx.prefix
+        embed = discord.Embed(
+            title=f"Help: `{prefix}{cmd.name}`" + (f" (alias: `{prefix}{ctx.invoked_with}`)" if ctx.invoked_with != cmd.name else ""),
+            description=cmd.help or "No description provided.",
+            color=discord.Color.green()
+        )
+        if cmd.usage:
+            embed.add_field(name="Usage", value=f"`{prefix}{cmd.name} {cmd.usage}`", inline=False)
+        if cmd.aliases:
+            embed.add_field(name="Aliases", value=", ".join(f"`{prefix}{a}`" for a in cmd.aliases), inline=False)
+        await ctx.send(embed=embed)
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send("You don't have permission to use this command.")
+    elif isinstance(error, commands.BotMissingPermissions):
+        await ctx.send("I don't have permission to do that.")
+    elif isinstance(error, commands.CommandOnCooldown):
+        await ctx.send(f"Cooldown. Try again in {error.retry_after:.1f}s.")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send(f"Invalid argument: {error}")
+
 # --- Background Tasks & Execution ---
 async def start_http():
     config = uvicorn.Config(app, host="0.0.0.0", port=10000, log_level="warning")

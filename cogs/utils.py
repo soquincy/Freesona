@@ -82,7 +82,7 @@ class UtilCog(commands.Cog):
 
         if target:
             if target == ctx.author:
-                await ctx.send("You can't ban yourself.")
+                await ctx.send("Why would you want to ban yourself?")
                 return
             if target.top_role >= ctx.author.top_role and ctx.guild.owner != ctx.author:
                 await ctx.send("You can't ban someone with a role higher than or equal to yours.")
@@ -131,6 +131,10 @@ class UtilCog(commands.Cog):
     @commands.bot_has_permissions(moderate_members=True)
     async def timeout_cmd(self, ctx, member: discord.Member, length: str, *, reason: str = "No reason provided"):
         await ctx.defer()
+
+        if member == ctx.author:
+            await ctx.send("You seriously want to time out yourself?.")
+            return
 
         delta = parse_time_string(length)
         if not delta:
