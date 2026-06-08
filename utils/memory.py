@@ -69,7 +69,8 @@ def memory_to_contents(channel_id: int) -> list:
     for entry in get_memory(channel_id):
         last_idx  = len(contents) - 1
         last      = contents[last_idx] if contents else None
-        same_role = last is not None and last.role == entry["role"]
+        api_role  = "model" if entry["role"] == "model" else "user"
+        same_role = last is not None and last.role == api_role
         same_user = entry.get("username", "") == content_usernames.get(last_idx, "")
 
         if same_role and same_user and last is not None:
@@ -80,7 +81,7 @@ def memory_to_contents(channel_id: int) -> list:
             )
         else:
             contents.append(_types.Content(
-                role=entry["role"],
+                role=api_role,
                 parts=[_types.Part(text=entry["text"])]
             ))
             content_usernames[len(contents) - 1] = entry.get("username", "")

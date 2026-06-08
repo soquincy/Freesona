@@ -16,11 +16,11 @@ ENV/
 # Runtime / bot state
 memory.json
 persona.json
-personas.json
 
 # User/private notes
 persona.txt
 pnotes.md
+ATTRIBUTION_FIXES.md
 
 # Tool caches
 .pytest_cache/

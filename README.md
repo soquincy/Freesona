@@ -163,18 +163,18 @@ Licensed under the **MIT License**. See [LICENSE](LICENSE).
 
 ### Short-term
 
-* Persona gallery in the wiki
-* Per-fact memory controls — delete or edit one remembered fact without clearing the user
-* RSS feed presets for reliable wire/news sources as public feeds are confirmed
+* [x] Persona gallery in the wiki
+* [x] Per-fact memory controls — delete or edit one remembered fact without clearing the user
+* [x] RSS feed presets for reliable wire/news sources as public feeds are confirmed
 
 ### Medium-term
 
-* Multi-provider support — swap AI providers without changing command code
-* Message claiming system for multi-instance deployments
-* RSS monitors — post matching feed items into selected channels
-* Optional generation logging — instance operators can enable local-only logs for abuse reporting and debugging; disabled by default, no data leaves the host
+* [ ] Multi-provider support — swap AI providers without changing command code
+* [ ] Message claiming system for multi-instance deployments
+* [x] RSS monitors — post matching feed items into selected channels
+* [ ] Optional generation logging — instance operators can enable local-only logs for abuse reporting and debugging; disabled by default, no data leaves the host
 
 ### Long-term
 
-* Knowledge base — `/kbadd`, `/kblist`, `/kbdelete`
-* Web dashboard via FastAPI — `fastapi_server.py` is already in the repo
+* [ ] Knowledge base — `/kbadd`, `/kblist`, `/kbdelete`
+* [ ] Web dashboard via FastAPI — `fastapi_server.py` is already in the repo

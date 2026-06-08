@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import warnings
 import yaml
 from collections import OrderedDict
 from pathlib import Path
@@ -11,7 +12,17 @@ from discord.ext import commands
 
 # Suppress noisy logs to keep output clean
 logging.basicConfig(level=logging.WARNING)
+logging.captureWarnings(True)
 logger = logging.getLogger("PreviewBot")
+logging.getLogger("discord").setLevel(logging.ERROR)
+logging.getLogger("discord.state").setLevel(logging.ERROR)
+logging.getLogger("discord.client").setLevel(logging.ERROR)
+logging.getLogger("discord.http").setLevel(logging.ERROR)
+logging.getLogger("asyncio").setLevel(logging.ERROR)
+
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="asyncio")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="asyncio")
+warnings.filterwarnings("ignore", module="discord")
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -98,18 +109,25 @@ async def main() -> None:
     bot.remove_command("help")
 
     loaded_successfully = []
+    failed_extensions = []
     for ext in extensions:
         try:
             await bot.load_extension(ext)
             loaded_successfully.append(ext)
         except Exception as e:
-            print(f"Failed to load {ext}: {e}", file=sys.stderr)
+            failed_extensions.append({
+                "extension": ext,
+                "error": str(e)
+            })
+            logger.debug(f"Failed to load {ext}: {e}")
 
     report = {
         "bot_info": {
             "prefix": prefix,
             "extension_count": len(loaded_successfully),
-            "modules": {name: enabled_modules.get(name, True) for name in sorted(OPTIONAL_MODULES)}
+            "loaded_extensions": loaded_successfully,
+            "modules": {name: enabled_modules.get(name, True) for name in sorted(OPTIONAL_MODULES)},
+            "failed_extensions": failed_extensions,
         },
         "prefix_commands": process_commands(bot.commands, is_tree=False),
         "slash_commands": process_commands(bot.tree.get_commands(), is_tree=True)

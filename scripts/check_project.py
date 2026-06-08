@@ -201,7 +201,7 @@ def check_secret_files_not_tracked() -> None:
             [
                 "git", "ls-files",
                 ".env",
-                "persona.txt", "persona.json", "personas.json",
+                "persona.txt", "persona.json",
                 "memory.json", "kb.json",
             ],
             cwd=ROOT,

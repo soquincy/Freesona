@@ -6,7 +6,7 @@ import logging
 from typing import Optional
 
 import discord
-from discord import ui
+from discord import ui, app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -14,9 +14,9 @@ load_dotenv()
 
 logger = logging.getLogger("FreesonaBot")
 
-AI_PERSONA_PATH      = os.getenv("AI_PERSONA_FILE",    "/etc/secrets/persona.txt")
-AI_PERSONA_JSON_PATH = os.getenv("AI_PERSONA_JSON_FILE", "/etc/secrets/persona.json")
-PERSONAS_PATH        = os.getenv("AI_PERSONAS_FILE",   "/etc/secrets/personas.json")
+AI_PERSONA_PATH      = os.getenv("AI_PERSONA_FILE",      "persona.txt")
+AI_PERSONA_JSON_PATH = os.getenv("AI_PERSONA_JSON_FILE", "persona.json")
+PERSONAS_PATH        = os.getenv("AI_PERSONAS_FILE",      "personas.json")
 
 PERSONA_FIELDS = [
     "core_personality",
@@ -83,11 +83,19 @@ def save_persona_json(data: dict):
 
 
 def assemble_persona(data: dict) -> str:
+    xml_tags = {
+        "system_instructions": "system_instructions",
+        "core_personality":    "role",
+        "background":          "background",
+        "beliefs":             "beliefs",
+        "language":            "language",
+    }
     parts = []
     for f in ASSEMBLY_ORDER:
-        label = PERSONA_LABELS[f]
+        tag   = xml_tags[f]
         value = data.get(f, "").strip()
-        parts.append(f"[{label}]\n{value}" if value else f"[{label}]\n(empty)")
+        if value:
+            parts.append(f"<{tag}>\n{value}\n</{tag}>")
     return "\n\n".join(parts)
 
 
@@ -179,7 +187,7 @@ class PersonaCoreModal(ui.Modal, title="Persona: Core & Background"):
         try:
             save_persona_json(PERSONA_DATA)
             await interaction.response.send_message(
-                "Core and background saved. Use `/setpersona` to edit the full persona.",
+                "✅ Core & Background saved. Use `/setpersona style` for the remaining fields.",
                 ephemeral=True
             )
         except Exception as e:
@@ -226,10 +234,14 @@ class PersonaStyleModal(ui.Modal, title="Persona: Style & Instructions"):
         CURRENT_PERSONA = assemble_persona(PERSONA_DATA)
         try:
             save_persona_json(PERSONA_DATA)
-            await interaction.response.send_message("Style and instructions saved.", ephemeral=True)
+            await interaction.response.send_message("✅ Style & Instructions saved.", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"Save failed: {e}", ephemeral=True)
 
+
+# ---------------------------------------------------------------------------
+# Panel UI  (/setpersona opens this; SetPersonaGroup slash subcommands removed)
+# ---------------------------------------------------------------------------
 
 class PersonaFullModal(ui.Modal, title="Persona Editor"):
     core_personality = ui.TextInput(
@@ -273,11 +285,9 @@ class PersonaFullModal(ui.Modal, title="Persona Editor"):
         if PERSONA_LOCKED:
             await interaction.response.send_message("Persona is locked. Use `/personaunlock` first.", ephemeral=True)
             return
-
         for field_name in PERSONA_FIELDS:
             PERSONA_DATA[field_name] = getattr(self, field_name).value.strip()
         CURRENT_PERSONA = assemble_persona(PERSONA_DATA)
-
         try:
             save_persona_json(PERSONA_DATA)
             await interaction.response.send_message("Persona saved.", ephemeral=True)
@@ -296,27 +306,50 @@ class PersonaPanelView(ui.View):
             return False
         return True
 
-    @ui.button(label="Edit Persona", style=discord.ButtonStyle.primary)
+    @ui.button(label="Edit Persona", style=discord.ButtonStyle.primary, emoji="✏️")
     async def edit_persona(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(PersonaFullModal(PERSONA_DATA))
 
-    @ui.button(label="Preview", style=discord.ButtonStyle.secondary)
-    async def preview_persona(self, interaction: discord.Interaction, button: ui.Button):
-        embed = discord.Embed(title="Persona Preview", color=discord.Color.yellow())
+    @ui.button(label="Preview Prompt", style=discord.ButtonStyle.secondary, emoji="📄")
+    async def preview_prompt(self, interaction: discord.Interaction, button: ui.Button):
+        persona = CURRENT_PERSONA.strip() or "*(no persona assembled yet)*"
+        # Chunk to 4000 chars to stay within embed description limit
+        embed = discord.Embed(
+            title="Assembled Persona Prompt",
+            description=f"```{persona[:3900]}```",
+            color=discord.Color.yellow(),
+        )
+        if len(persona) > 3900:
+            embed.set_footer(text=f"Truncated — full prompt is {len(persona)} chars.")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @ui.button(label="Debug", style=discord.ButtonStyle.secondary, emoji="🔍")
+    async def debug_persona(self, interaction: discord.Interaction, button: ui.Button):
+        locked  = "🔒 Locked" if PERSONA_LOCKED else "🔓 Unlocked"
+        legacy  = "Yes — migrate via `/setpersona`" if LEGACY_DETECTED else "No"
+        filled  = sum(1 for f in PERSONA_FIELDS if PERSONA_DATA.get(f, "").strip())
+        embed = discord.Embed(title="Persona Debug", color=discord.Color.og_blurple())
+        embed.add_field(name="Lock State",     value=locked,                    inline=True)
+        embed.add_field(name="Legacy Mode",    value=legacy,                    inline=True)
+        embed.add_field(name="Fields Filled",  value=f"{filled}/{len(PERSONA_FIELDS)}", inline=True)
+        embed.add_field(name="Prompt Length",  value=f"{len(CURRENT_PERSONA)} chars",  inline=True)
         for field_name in ASSEMBLY_ORDER:
-            value = PERSONA_DATA.get(field_name, "").strip() or "(empty)"
+            value = PERSONA_DATA.get(field_name, "").strip()
             embed.add_field(
                 name=PERSONA_LABELS[field_name],
-                value=value[:1024],
+                value=(value[:512] or "*(empty)*"),
                 inline=False,
             )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @ui.button(label="Status", style=discord.ButtonStyle.secondary)
-    async def persona_status(self, interaction: discord.Interaction, button: ui.Button):
-        locked = "locked" if PERSONA_LOCKED else "unlocked"
-        legacy = "legacy persona.txt active" if LEGACY_DETECTED else "structured persona active"
-        await interaction.response.send_message(f"Persona is {locked}; {legacy}.", ephemeral=True)
+    @ui.button(label="Lock / Unlock", style=discord.ButtonStyle.danger, emoji="🔐")
+    async def toggle_lock(self, interaction: discord.Interaction, button: ui.Button):
+        global PERSONA_LOCKED
+        PERSONA_LOCKED = not PERSONA_LOCKED
+        state = "🔒 locked" if PERSONA_LOCKED else "🔓 unlocked"
+        await interaction.response.send_message(
+            f"Persona is now **{state}**.", ephemeral=True
+        )
 
 
 async def open_persona_panel(interaction: discord.Interaction):
@@ -327,18 +360,12 @@ async def open_persona_panel(interaction: discord.Interaction):
     if not await bot.is_owner(interaction.user):
         await interaction.response.send_message("Owner only.", ephemeral=True)
         return
-
+    locked = "🔒 Locked" if PERSONA_LOCKED else "🔓 Unlocked"
     embed = discord.Embed(
         title="Persona Editor",
-        description="Use the buttons below to edit, preview, or check the active persona.",
+        description="Use the buttons below to manage the active persona.",
         color=discord.Color.yellow(),
     )
-    embed.add_field(name="Fields", value="\n".join(PERSONA_LABELS[f] for f in PERSONA_FIELDS), inline=False)
+    embed.add_field(name="Lock State", value=locked, inline=True)
+    embed.add_field(name="Fields",     value="\n".join(f"• {PERSONA_LABELS[f]}" for f in PERSONA_FIELDS), inline=False)
     await interaction.response.send_message(embed=embed, view=PersonaPanelView(bot), ephemeral=True)
-
-
-# ---------------------------------------------------------------------------
-# Compatibility aliases for older imports
-# ---------------------------------------------------------------------------
-
-SetPersonaGroup = None

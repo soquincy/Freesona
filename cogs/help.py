@@ -15,7 +15,7 @@ BOT_NAME = os.getenv("BOT_NAME", "Bot")
 
 class HelpView(discord.ui.View):
     def __init__(self, bot, ctx, categories, prefix):
-        super().__init__(timeout=60)
+        super().__init__(timeout=None)
         self.bot = bot
         self.ctx = ctx
         self.categories = categories
@@ -67,18 +67,18 @@ class HelpCog(commands.Cog):
             prefix = prefix(self.bot, ctx.message)
 
         if not command_name:
-            # Build the command strings
             cats = {
-                "Fun": [], "Moderation": [], "Utility": [], 
+                "Fun": [], "Moderation": [], "Utility": [],
                 "Media": [], "AI Persona": [], "News": []
             }
 
             for cmd in self.bot.commands:
-                if cmd.hidden: continue
-                
+                if cmd.hidden:
+                    continue
+
                 entry = f"`{cmd.name}` - {cmd.help or 'No description'}"
-                
-                if cmd.name in ['hello', 'write', 'ask', 'today']:
+
+                if cmd.name in ['hello', 'write', 'ask', 'randommember', 'coinflip', 'roll', 'pick']:
                     cats["Fun"].append(entry)
                 elif cmd.name in ['kick', 'purge', 'removetimeout', 'timeout', 'ban', 'unban']:
                     cats["Moderation"].append(entry)
@@ -86,20 +86,23 @@ class HelpCog(commands.Cog):
                     cats["Utility"].append(entry)
                 elif cmd.name in ['download', 'audio', 'separate']:
                     cats["Media"].append(entry)
-                elif cmd.name in ['rss']:
+                elif cmd.name == 'rss':
                     cats["News"].append("`/rss list`, `/rss latest`, `/rss add`, `/rss setchannel`...")
                 elif cmd.name in [
-                    'personalock', 'personaunlock', 'personasave', 'personaload', 
-                    'personalist', 'personadelete', 'debugpersona', 'setchannel', 
-                    'clearchannel', 'clearmemory', 'chatmode', 'model', 'module'
+                    'personalock', 'personaunlock', 'personasave', 'personaload',
+                    'personalist', 'personadelete', 'debugpersona', 'setchannel',
+                    'clearchannel', 'clearmemory', 'memorylist', 'memorydelete',
+                    'migrate', 'chatmode', 'botwhitelist', 'model', 'module'
                 ]:
                     cats["AI Persona"].append(entry)
 
-            # Format the categories into strings
             formatted_cats = {k: "\n".join(v) if v else "None" for k, v in cats.items()}
-            
-            # Add the manual extras
-            formatted_cats["AI Persona"] += "\n`/setpersona` — Persona editor\n`/autonomy` — Auto-mode"
+
+            formatted_cats["AI Persona"] += (
+                "\n`/setpersona` — Persona editor\n"
+                "`/autonomy` — Auto-mode\n"
+                "`/botwhitelist` — Manage bot whitelist"
+            )
             formatted_cats["News"] = (
                 "`/rss list` — List feeds\n`/rss latest <name>` — Fetch articles\n"
                 "`/rss add <name> <url>` — Add feed\n`/rss setchannel <#ch>` — Auto-post"
@@ -111,23 +114,54 @@ class HelpCog(commands.Cog):
                 color=discord.Color.blue()
             )
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-            
+
             view = HelpView(self.bot, ctx, formatted_cats, prefix)
             await ctx.send(embed=embed, view=view)
 
         else:
-            # Individual command help (same as your original logic)
-            command = self.bot.get_command(command_name.lower())
+            search_name = command_name.lower().lstrip("/")
+            command = self.bot.get_command(search_name)
             if command and not command.hidden:
+                was_alias = search_name != command.name
+                title = f"Help: `{prefix}{command.name}`"
+                if was_alias:
+                    title += f" (alias: `{prefix}{search_name}`)"
+
                 embed = discord.Embed(
-                    title=f"Help: `{prefix}{command.name}`",
+                    title=title,
                     description=command.help or "No description provided.",
                     color=discord.Color.green()
                 )
-                # ... (rest of your existing individual command logic)
+                if command.usage:
+                    embed.add_field(name="Usage", value=f"`{prefix}{command.name} {command.usage}`", inline=False)
+                if command.aliases:
+                    embed.add_field(name="Aliases", value=", ".join(f"`{prefix}{a}`" for a in command.aliases), inline=False)
                 await ctx.send(embed=embed)
-            else:
-                await ctx.send(f"No command named `{command_name}` found.")
+                return
 
+            app_command = self.find_app_command(search_name)
+            if app_command:
+                embed = discord.Embed(
+                    title=f"Help: `/{app_command.name}`",
+                    description=app_command.description or "No description provided.",
+                    color=discord.Color.green()
+                )
+                await ctx.send(embed=embed)
+                return
+
+            await ctx.send(f"No command named `{command_name}` found.")
+
+    def find_app_command(self, name: str):
+        name = name.lstrip("/").lower()
+        tree = self.bot.tree
+        walker = getattr(tree, "walk_commands", None)
+        if walker is not None:
+            for cmd in tree.walk_commands():
+                if cmd.name == name:
+                    return cmd
+        commands_map = getattr(tree, "_commands", None)
+        if isinstance(commands_map, dict):
+            return commands_map.get(name)
+        return None
 async def setup(bot):
     await bot.add_cog(HelpCog(bot))
