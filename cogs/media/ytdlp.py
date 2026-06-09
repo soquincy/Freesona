@@ -264,6 +264,23 @@ class YtDlp(commands.Cog):
 
         return None
 
+    async def fetch_ytdlp(self, ctx: commands.Context, url: str, is_audio: bool = True, tmp_dir: str | None = None) -> str | None:
+        """Download media into the provided temp directory and return the local file path."""
+        url = _normalize_url(url)
+        if not is_public_http_url(url):
+            raise RuntimeError("Please provide a public http(s) URL.")
+
+        if tmp_dir is None:
+            with tempfile.TemporaryDirectory() as local_tmp_dir:
+                return await self._fetch_audio(url, local_tmp_dir) if is_audio else await self._fetch_video(url, local_tmp_dir)
+
+        try:
+            if is_audio:
+                return await self._fetch_audio(url, tmp_dir)
+            return await self._fetch_video(url, tmp_dir)
+        except asyncio.TimeoutError:
+            raise
+
     # ------------------------------------------------------------------
     # Shared download handler
     # ------------------------------------------------------------------

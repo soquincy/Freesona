@@ -1,4 +1,4 @@
-# cogs/genai.py: GenAI cog — wiring only. Logic lives in utils/. Well, the main point of this bot in general.
+# cogs/ai/genai.py: GenAI cog — wiring only. Logic lives in utils/. Well, the main point of this bot in general.
 # You may disable this module with /module disable genai, though you will lose access to all AI features and commands.
 # This cog is also responsible for the on_message event that triggers AI responses, so disabling it will also stop the bot from responding to messages in channels.
 # Wolfram Alpha functionality is not affected by this and will still work if you disable this cog.

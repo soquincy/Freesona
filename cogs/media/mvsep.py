@@ -218,7 +218,7 @@ class MVSepCog(commands.Cog):
             return None, source
 
         # 3. Platform/social URL — yt-dlp download then upload to MVSEP.
-        from cogs.ytdlp import YtDlp
+        from cogs.media.ytdlp import YtDlp
         ytdlp_cog = self.bot.get_cog("YtDlp")
         if ytdlp_cog is None or not isinstance(ytdlp_cog, YtDlp):
             raise RuntimeError("yt-dlp cog not loaded.")

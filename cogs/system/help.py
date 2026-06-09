@@ -51,6 +51,10 @@ class HelpView(discord.ui.View):
     async def util_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_help(interaction, "Utility")
 
+    @discord.ui.button(label="Fun", style=discord.ButtonStyle.success, emoji="🎲")
+    async def fun_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.update_help(interaction, "Fun")
+
     @discord.ui.button(label="Moderation", style=discord.ButtonStyle.danger, emoji="🛡️")
     async def mod_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_help(interaction, "Moderation")

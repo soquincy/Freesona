@@ -95,7 +95,7 @@ def check_public_url_guard() -> None:
 
 
 def load_mvsep_helpers() -> dict:
-    source = (ROOT / "cogs" / "mvsep.py").read_text(encoding="utf-8")
+    source = (ROOT / "cogs" / "media" / "mvsep.py").read_text(encoding="utf-8")
     module = ast.parse(source)
     keep: list[ast.stmt] = []
 
@@ -144,8 +144,8 @@ def check_module_registry() -> None:
     assert enabled["genai"] is False
     assert enabled["mvsep"] is True
     assert "unknown" not in enabled
-    assert modules.module_extension("GENAI") == "cogs.genai"
-    assert modules.module_extension("news") == "cogs.news"
+    assert modules.module_extension("GENAI") == "cogs.ai.genai"
+    assert modules.module_extension("news") == "cogs.system.news"
     assert modules.module_extension("missing") is None
 
 

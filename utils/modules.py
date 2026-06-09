@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 CORE_EXTENSIONS = [
-    "cogs.help",
-    "cogs.ping",
-    "cogs.status",
-    "cogs.admin",
+    "cogs.system.help",
+    "cogs.tools.ping",
+    "cogs.system.status",
+    "cogs.system.admin",
 ]
 
 OPTIONAL_MODULES = {
-    "hello": "cogs.hello",
-    "moderation": "cogs.utils",
-    "genai": "cogs.genai",
-    "wolfram": "cogs.wolfram",
-    "news": "cogs.news",
-    "ytdlp": "cogs.ytdlp",
-    "mvsep": "cogs.mvsep",
-    "random": "cogs.random",
+    "hello":      "cogs.fun.hello",
+    "random":     "cogs.fun.random",
+    "moderation": "cogs.moderation.core",
+    "genai":      "cogs.ai.genai",
+    "wolfram":    "cogs.tools.wolfram",
+    "news":       "cogs.system.news",
+    "ytdlp":      "cogs.media.ytdlp",
+    "mvsep":      "cogs.media.mvsep",
 }
 
 DEFAULT_ENABLED_MODULES = {name: True for name in OPTIONAL_MODULES}
