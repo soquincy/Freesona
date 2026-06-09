@@ -127,8 +127,6 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        WHITELIST_ID = 1482682376655208548
-
         if message.guild is None:
             return
         if message.type not in (discord.MessageType.default, discord.MessageType.reply):
@@ -150,7 +148,7 @@ class GenAICog(commands.Cog):
             return  # Hard stop reprocessing own output
 
         config = load_config()
-        whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
+        whitelist = config.get("whitelist_bot_ids", [])
 
         # Ingestion filter: Ignore external bots unless they are whitelisted or webhooks
         if message.author.bot and not message.webhook_id and message.author.id not in whitelist:
