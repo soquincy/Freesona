@@ -2,6 +2,7 @@
 # Obviosly if you need help this is the cog to go to. Lolz.
 # Buttons. Yay!
 
+import logging
 import os
 import discord
 from typing import Optional
@@ -12,6 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_NAME = os.getenv("BOT_NAME", "Bot")
+logger = logging.getLogger(__name__)
 
 class HelpView(discord.ui.View):
     def __init__(self, bot, ctx, categories, prefix):
@@ -22,18 +24,33 @@ class HelpView(discord.ui.View):
         self.prefix = prefix
 
     async def update_help(self, interaction: discord.Interaction, category: str):
-        embed = discord.Embed(
-            title=f"{category} Commands",
-            description=f"Detailed help for {BOT_NAME}'s {category.lower()} features.",
-            color=discord.Color.blue()
-        )
-        embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-        
-        content = self.categories.get(category, "No commands found.")
-        embed.add_field(name="Commands", value=content, inline=False)
-        embed.set_footer(text=f"Use {self.prefix}help <command> for specifics.")
-        
-        await interaction.response.edit_message(embed=embed, view=self)
+        try:
+            await interaction.response.defer()
+
+            embed = discord.Embed(
+                title=f"{category} Commands",
+                description=f"Detailed help for {BOT_NAME}'s {category.lower()} features.",
+                color=discord.Color.blue()
+            )
+
+            user = getattr(self.bot, "user", None)
+            avatar = getattr(getattr(user, "display_avatar", None), "url", None)
+            if avatar:
+                embed.set_thumbnail(url=avatar)
+
+            content = self.categories.get(category, "No commands found.")
+            embed.add_field(name="Commands", value=content, inline=False)
+            embed.set_footer(text=f"Use {self.prefix}help <command> for specifics.")
+
+            message = interaction.message
+            if message is not None:
+                await message.edit(embed=embed, view=self)
+            else:
+                await interaction.followup.send(embed=embed, view=self)
+        except Exception:
+            logger.exception("Help button interaction failed for category %s", category)
+            if not interaction.response.is_done():
+                await interaction.response.send_message("The help panel could not be updated right now.", ephemeral=True)
 
     @discord.ui.button(label="AI & Persona", style=discord.ButtonStyle.primary, emoji="🤖")
     async def ai_button(self, interaction: discord.Interaction, button: discord.ui.Button):
