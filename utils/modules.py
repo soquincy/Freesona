@@ -18,6 +18,7 @@ OPTIONAL_MODULES = {
     "news":       "cogs.system.news",
     "ytdlp":      "cogs.media.ytdlp",
     "mvsep":      "cogs.media.mvsep",
+    "warns":      "cogs.moderation.warns",
 }
 
 DEFAULT_ENABLED_MODULES = {name: True for name in OPTIONAL_MODULES}

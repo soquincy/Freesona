@@ -79,6 +79,7 @@ AI_PERSONA_JSON_FILE=persona.json
 AI_PERSONAS_FILE=personas.json
 CONFIG_FILE_PATH=config.json
 MEMORY_FILE_PATH=memory.db
+WARNINGS_FILE_PATH=warnings.db
 
 # Cloud (Railway/Render — requires /data volume mount)
 # AI_PERSONA_FILE=/data/persona.txt
@@ -86,6 +87,7 @@ MEMORY_FILE_PATH=memory.db
 # AI_PERSONAS_FILE=/data/personas.json
 # CONFIG_FILE_PATH=/data/config.json
 # MEMORY_FILE_PATH=/data/memory.json
+# WARNINGS_FILE_PATH=/data/warnings.db
 ```
 
 | Environment | Path prefix | Notes |
