@@ -1,4 +1,4 @@
-# cogs/random.py
+# cogs/fun/random.py - Fun commands that involve randomness, like picking a random member, flipping a coin, rolling a die, or picking from a list of choices.
 
 import secrets
 

@@ -2,6 +2,7 @@
 # Obviosly if you need help this is the cog to go to. Lolz.
 # Buttons. Yay!
 
+import logging
 import os
 import discord
 from typing import Optional
@@ -12,6 +13,34 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_NAME = os.getenv("BOT_NAME", "Bot")
+logger = logging.getLogger(__name__)
+
+
+def _split_embed_text(text: str, limit: int = 1024) -> list[str]:
+    """Split long help text into Discord-safe chunks."""
+    lines = text.splitlines()
+    chunks = []
+    current = ""
+
+    for line in lines:
+        candidate = f"{current}\n{line}" if current else line
+        if len(candidate) > limit:
+            if current:
+                chunks.append(current)
+                current = line
+            else:
+                chunks.append(candidate[:limit])
+                current = candidate[limit:]
+                if current.startswith("\n"):
+                    current = current[1:]
+        else:
+            current = candidate
+
+    if current:
+        chunks.append(current)
+
+    return chunks or [text[:limit]]
+
 
 class HelpView(discord.ui.View):
     def __init__(self, bot, ctx, categories, prefix):
@@ -20,20 +49,47 @@ class HelpView(discord.ui.View):
         self.ctx = ctx
         self.categories = categories
         self.prefix = prefix
+        self.current_category = None
+        self.page_index = 0
 
-    async def update_help(self, interaction: discord.Interaction, category: str):
-        embed = discord.Embed(
-            title=f"{category} Commands",
-            description=f"Detailed help for {BOT_NAME}'s {category.lower()} features.",
-            color=discord.Color.blue()
-        )
-        embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-        
-        content = self.categories.get(category, "No commands found.")
-        embed.add_field(name="Commands", value=content, inline=False)
-        embed.set_footer(text=f"Use {self.prefix}help <command> for specifics.")
-        
-        await interaction.response.edit_message(embed=embed, view=self)
+    async def update_help(self, interaction: discord.Interaction, category: str, page: int = 0):
+        try:
+            await interaction.response.defer()
+
+            embed = discord.Embed(
+                title=f"{category} Commands",
+                description=f"Detailed help for {BOT_NAME}'s {category.lower()} features.",
+                color=discord.Color.blue()
+            )
+
+            user = getattr(self.bot, "user", None)
+            avatar = getattr(getattr(user, "display_avatar", None), "url", None)
+            if avatar:
+                embed.set_thumbnail(url=avatar)
+
+            content = self.categories.get(category, "No commands found.")
+            chunks = _split_embed_text(content)
+            self.current_category = category
+            self.page_index = max(0, min(page, len(chunks) - 1))
+
+            embed.add_field(name="Commands", value=chunks[self.page_index], inline=False)
+            if len(chunks) > 1:
+                embed.set_footer(text=f"Page {self.page_index + 1}/{len(chunks)} • Use {self.prefix}help <command> for specifics.")
+            else:
+                embed.set_footer(text=f"Use {self.prefix}help <command> for specifics.")
+
+            self.prev_button.disabled = self.page_index == 0
+            self.next_button.disabled = self.page_index >= len(chunks) - 1
+
+            message = interaction.message
+            if message is not None:
+                await message.edit(embed=embed, view=self)
+            else:
+                await interaction.followup.send(embed=embed, view=self)
+        except Exception:
+            logger.exception("Help button interaction failed for category %s", category)
+            if not interaction.response.is_done():
+                await interaction.response.send_message("The help panel could not be updated right now.", ephemeral=True)
 
     @discord.ui.button(label="AI & Persona", style=discord.ButtonStyle.primary, emoji="🤖")
     async def ai_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -51,9 +107,26 @@ class HelpView(discord.ui.View):
     async def util_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_help(interaction, "Utility")
 
+    @discord.ui.button(label="Fun", style=discord.ButtonStyle.success, emoji="🎲")
+    async def fun_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.update_help(interaction, "Fun")
+
     @discord.ui.button(label="Moderation", style=discord.ButtonStyle.danger, emoji="🛡️")
     async def mod_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_help(interaction, "Moderation")
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary, row=1)
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_category and self.page_index > 0:
+            await self.update_help(interaction, self.current_category, self.page_index - 1)
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary, row=1)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_category:
+            content = self.categories.get(self.current_category, "")
+            total_pages = len(_split_embed_text(content))
+            if self.page_index < total_pages - 1:
+                await self.update_help(interaction, self.current_category, self.page_index + 1)
 
 class HelpCog(commands.Cog):
     def __init__(self, bot):

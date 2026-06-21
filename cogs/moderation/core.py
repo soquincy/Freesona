@@ -1,4 +1,4 @@
-# cogs/utils.py: Utility functions like ban, timeouts, kicks
+# cogs/moderation/core.py: Moderation actions like ban, timeouts, kicks
 
 import discord
 from discord.ext import commands
@@ -26,7 +26,7 @@ async def try_dm(user: discord.User | discord.Member, embed: discord.Embed) -> b
     except (discord.Forbidden, discord.HTTPException):
         return False
 
-class UtilCog(commands.Cog):
+class ModerationCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
@@ -161,4 +161,4 @@ class UtilCog(commands.Cog):
         await ctx.send(f"Removed timeout for {member.mention}.")
 
 async def setup(bot):
-    await bot.add_cog(UtilCog(bot))
+    await bot.add_cog(ModerationCog(bot))

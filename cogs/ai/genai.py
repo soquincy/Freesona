@@ -1,4 +1,4 @@
-# cogs/genai.py: GenAI cog — wiring only. Logic lives in utils/. Well, the main point of this bot in general.
+# cogs/ai/genai.py: GenAI cog — wiring only. Logic lives in utils/. Well, the main point of this bot in general.
 # You may disable this module with /module disable genai, though you will lose access to all AI features and commands.
 # This cog is also responsible for the on_message event that triggers AI responses, so disabling it will also stop the bot from responding to messages in channels.
 # Wolfram Alpha functionality is not affected by this and will still work if you disable this cog.
@@ -127,8 +127,6 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        WHITELIST_ID = 1482682376655208548
-
         if message.guild is None:
             return
         if message.type not in (discord.MessageType.default, discord.MessageType.reply):
@@ -150,7 +148,7 @@ class GenAICog(commands.Cog):
             return  # Hard stop reprocessing own output
 
         config = load_config()
-        whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
+        whitelist = config.get("whitelist_bot_ids", [])
 
         # Ingestion filter: Ignore external bots unless they are whitelisted or webhooks
         if message.author.bot and not message.webhook_id and message.author.id not in whitelist:
@@ -709,19 +707,19 @@ class GenAICog(commands.Cog):
     # -------------------------------------------------------------------
     # /botwhitelist add / remove / list
     # -------------------------------------------------------------------
-    @commands.hybrid_group(name='botwhitelist', aliases=['bw'], help='Manage whitelisted bot IDs (Admin only).')
+    @commands.hybrid_group(name='botwhitelist', aliases=['bw'], invoke_without_command=True, help='Manage whitelisted bot IDs (Admin only).')
     @commands.has_permissions(administrator=True)
     async def whitelist_group(self, ctx):
-        if ctx.invoked_subcommand is None:
-            config = load_config()
-            whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
-            if not whitelist:
-                await ctx.send("No bots are whitelisted.", ephemeral=True if ctx.interaction else False)
-                return
-            lines = "\n".join(f"- `{bot_id}`" for bot_id in whitelist)
-            await ctx.send(f"Whitelisted bots:\n{lines}", ephemeral=True if ctx.interaction else False)
+        config = load_config()
+        whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
+        if not whitelist:
+            await ctx.send("No bots are whitelisted.", ephemeral=True if ctx.interaction else False)
+            return
+        lines = "\n".join(f"- `{bot_id}`" for bot_id in whitelist)
+        await ctx.send(f"Whitelisted bots:\n{lines}", ephemeral=True if ctx.interaction else False)
 
     @whitelist_group.command(name='add', help='Add a bot ID to the whitelist.')
+    @app_commands.describe(bot_id='The bot ID to add to the whitelist.')
     async def whitelist_add(self, ctx, bot_id: int):
         config = load_config()
         whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
@@ -734,6 +732,7 @@ class GenAICog(commands.Cog):
         await ctx.send(f"Successfully added bot `{bot_id}` to the whitelist.", ephemeral=True if ctx.interaction else False)
 
     @whitelist_group.command(name='remove', help='Remove a bot ID from the whitelist.')
+    @app_commands.describe(bot_id='The bot ID to remove from the whitelist.')
     async def whitelist_remove(self, ctx, bot_id: int):
         config = load_config()
         whitelist = config.get("whitelist_bot_ids", [1482682376655208548])

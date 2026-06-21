@@ -118,7 +118,7 @@ async def on_ready():
 
     # Trigger legacy persona DM if needed — deferred here so bot is fully ready
     try:
-        from cogs.genai import LEGACY_DETECTED, BOT_NAME as GENAI_BOT_NAME
+        from cogs.ai.genai import LEGACY_DETECTED, BOT_NAME as GENAI_BOT_NAME
         if LEGACY_DETECTED:
             await bot.notify_owner_legacy(GENAI_BOT_NAME)
     except Exception as e:
@@ -168,4 +168,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Bot stopped.")
-        
