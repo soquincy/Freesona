@@ -163,9 +163,9 @@ Licensed under the **MIT License**. See [LICENSE](LICENSE).
 
 ### Short-term
 
-* [x] Persona gallery in the wiki
-* [x] Per-fact memory controls — delete or edit one remembered fact without clearing the user
-* [x] RSS feed presets for reliable wire/news sources as public feeds are confirmed
+* [x] Finish the cog folder migration and clean up stale imports
+* [x] Fix help-panel interaction failures and make the help view resilient
+* [x] Make `/botwhitelist` show the current whitelist entries directly
 
 ### Medium-term
 
