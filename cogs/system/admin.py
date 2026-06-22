@@ -3,6 +3,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from utils.config import load_config, save_config, get_model_name
 from utils.modules import OPTIONAL_MODULES, load_enabled_modules, module_extension, save_module_state
@@ -40,7 +41,7 @@ class AdminCog(commands.Cog):
     # ------------------------------------------------------------------
     # /module
     # ------------------------------------------------------------------
-    @commands.hybrid_group(name="module", invoke_without_command=True, help="List or change enabled bot modules.")
+    @commands.hybrid_group(name="module", fallback="help", help="List or change enabled bot modules.")
     @commands.has_permissions(administrator=True)
     async def module_group(self, ctx):
         await ctx.send("Use `/module list`, `/module enable`, `/module disable`, or `/module reload`.", ephemeral=True if ctx.interaction else False)
@@ -152,7 +153,7 @@ class AdminCog(commands.Cog):
     # ------------------------------------------------------------------
     # /model
     # ------------------------------------------------------------------
-    @commands.hybrid_group(name="model", invoke_without_command=True, help="Show or change the Gemini model.")
+    @commands.hybrid_group(name="model", fallback="current", help="Show or change the Gemini model.")
     @commands.is_owner()
     async def model_group(self, ctx):
         await ctx.send(f"Current model: `{get_model_name()}`", ephemeral=True if ctx.interaction else False)
@@ -185,12 +186,46 @@ class AdminCog(commands.Cog):
     @commands.hybrid_command(name="sync", help="Sync all global slash commands (Owner only).")
     @commands.is_owner()
     async def sync_commands(self, ctx):
-        await ctx.defer(ephemeral=True) # Tells Discord the bot is thinking
+        await ctx.defer(ephemeral=True)
         try:
             synced = await self.bot.tree.sync()
             await ctx.send(f"Synced {len(synced)} commands.", ephemeral=True)
         except Exception as e:
             await ctx.send(f"Sync failed: {e}", ephemeral=True)
+
+    # ------------------------------------------------------------------
+    # /settimezone
+    # ------------------------------------------------------------------
+    @commands.hybrid_command(name="settimezone", help="Set the bot's timezone for time-sensitive features.", usage="<timezone>")
+    @app_commands.describe(timezone="IANA timezone string, e.g. Asia/Manila, America/New_York, UTC")
+    @commands.has_permissions(administrator=True)
+    async def settimezone_cmd(self, ctx, timezone: str):
+        try:
+            ZoneInfo(timezone)
+        except ZoneInfoNotFoundError:
+            await ctx.send(
+                f"`{timezone}` is not a valid IANA timezone. "
+                "Examples: `Asia/Manila`, `America/New_York`, `Europe/London`, `UTC`.",
+                ephemeral=True if ctx.interaction else False
+            )
+            return
+
+        config = load_config()
+        config["timezone"] = timezone
+        save_config(config)
+        await ctx.send(f"Timezone set to `{timezone}`.", ephemeral=True if ctx.interaction else False)
+
+    # ------------------------------------------------------------------
+    # /setanniversarychannel
+    # ------------------------------------------------------------------
+    @commands.hybrid_command(name="setanniversarychannel", help="Set the channel for album anniversary announcements.", usage="<channel>")
+    @app_commands.describe(channel="The channel to post anniversary announcements in.")
+    @commands.has_permissions(administrator=True)
+    async def setanniversarychannel_cmd(self, ctx, channel: discord.TextChannel):
+        config = load_config()
+        config["anniversary_channel_id"] = channel.id
+        save_config(config)
+        await ctx.send(f"Anniversary announcements will be posted in {channel.mention}.", ephemeral=True if ctx.interaction else False)
 
 
 async def setup(bot):
