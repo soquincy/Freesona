@@ -63,11 +63,16 @@ Create a `.env` file:
 BOT_TOKEN=YOUR_DISCORD_BOT_TOKEN
 CHANNEL_ID=YOUR_LOG_CHANNEL_ID
 GOOGLE_API_KEY=YOUR_GEMINI_API_KEY
+GOOGLE_SEARCH_API_KEY=YOUR_GOOGLE_SEARCH_API_KEY # optional legacy fallback for /search
+SEARCH_ENGINE_ID=YOUR_SEARCH_ENGINE_ID # optional legacy fallback for /search
 MODEL_NAME=gemini-flash-lite-latest
 BOT_NAME=Freesona
 
 # Complimentary Tokens
 LOGOKIT_TOKEN=YOUR_LOGOKIT_KEY_HERE # for logos in RSS
+MVSEP_API_KEY=YOUR_MVSEP_API_KEY
+MVSEP_WEBHOOK_URL=https://your-public-host.example.com/webhooks/mvsep
+MVSEP_WEBHOOK_SEND_MAIL_ON_ERROR=false
 
 # Math Tokens
 WOLFRAM_APPID_SHORT=YOUR_WOLFRAM_APPID_SHORT
@@ -75,8 +80,9 @@ WOLFRAM_APPID_LLM=YOUR_WOLFRAM_APPID_LLM
 
 # Local
 AI_PERSONA_FILE=persona.txt
-AI_PERSONA_JSON_FILE=persona.json
+AI_PERSONA_JSON_FILE=persona.json # optional JSON persona file; loaded before persona.txt fallback
 AI_PERSONAS_FILE=personas.json
+AI_PERSONA=You are a helpful assistant.
 CONFIG_FILE_PATH=config.json
 MEMORY_FILE_PATH=memory.db
 WARNINGS_FILE_PATH=warnings.db
@@ -86,7 +92,7 @@ WARNINGS_FILE_PATH=warnings.db
 # AI_PERSONA_JSON_FILE=/data/persona.json
 # AI_PERSONAS_FILE=/data/personas.json
 # CONFIG_FILE_PATH=/data/config.json
-# MEMORY_FILE_PATH=/data/memory.json
+# MEMORY_FILE_PATH=/data/memory.db
 # WARNINGS_FILE_PATH=/data/warnings.db
 ```
 

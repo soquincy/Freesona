@@ -9,6 +9,6 @@ Logic modules for Freesona. This currently includes utilities for `cogs/genai.py
 | `persona.py` | Persona data layer, modals, `/setpersona` command group |
 | `intent.py` | Intent evaluator for autonomy — confidence scoring, signal detection, threshold mapping |
 | `security.py` | Injection detection, output sanitization |
-| `search.py` | Google Custom Search integration (to be depricated soon) |
+| `search.py` | Web search using Gemini grounding with optional legacy Google Custom Search fallback |
 | `config.py` | Config I/O (`config.json`), embed footer helper |
 | `rss.py` | RSS Feed parsing for feeds |
