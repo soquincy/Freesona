@@ -218,6 +218,15 @@ class AdminCog(commands.Cog):
         await ctx.send(f"Timezone set to `{timezone}`.", ephemeral=True if ctx.interaction else False)
 
     # ------------------------------------------------------------------
+    # /timezone
+    # ------------------------------------------------------------------
+    @commands.hybrid_command(name="timezone", aliases=["showtimezone", "viewtimezone"], help="Show the bot's currently configured timezone.")
+    async def timezone_cmd(self, ctx):
+        config = load_config()
+        tz = config.get("timezone", "UTC")
+        await ctx.send(f"Current bot timezone is `{tz}`.", ephemeral=True if ctx.interaction else False)
+
+    # ------------------------------------------------------------------
     # /dumpconfig
     # ------------------------------------------------------------------
     @commands.hybrid_command(name="dumpconfig", help="Dumps the current config.json contents (Owner only).")

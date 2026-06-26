@@ -66,6 +66,7 @@ The bot responds to messages in the configured conversation channel. It keeps th
 | `/botwhitelist remove <bot_id>` | Remove a bot ID from the whitelist | Administrator |
 | `/sync` | Sync global slash commands | Bot Owner |
 | `/settimezone <timezone>` | Set the bot's timezone | Administrator |
+| `/timezone` | Show the bot's currently configured timezone | Anyone |
 | `/setanniversarychannel <channel>` | Set the anniversary announcement channel | Administrator |
 
 Module and model names include slash-command suggestions.
