@@ -1,4 +1,4 @@
-# cogs/mvsep.py: MVSEP audio source separation (vocals/instrumental via BS Roformer)
+# cogs/media/mvsep.py: MVSEP audio source separation (vocals/instrumental via BS Roformer)
 # YES I make mashups and I need this shut up. You may disable this module with /module disable mvsep if you don't care about separating audio;
 # But hey it's a fun party trick and it works surprisingly well for a free API.
 

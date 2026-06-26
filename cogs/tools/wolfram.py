@@ -1,4 +1,4 @@
-# cogs/wolfram.py: Wolfram Alpha query solution
+# cogs/tools/wolfram.py: Wolfram Alpha query solution
 
 import os
 import aiohttp
