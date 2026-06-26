@@ -267,6 +267,7 @@ async def generate(
         reply = None
 
     text = sanitize_prompt(text)
+    user_message_text = text  # ← capture here, before text gets reassigned
     contents = memory_to_contents(channel_id) if channel_id is not None else []
 
     if reply:
@@ -330,6 +331,7 @@ async def generate(
             raise MalformedResponseError("Empty response from model.")
 
         text = clean_text(response.text)
+        text = re.sub(rf"^{re.escape(BOT_NAME)}\s*:\s*", "", text, flags=re.IGNORECASE).strip()
 
         if unsafe_output(text):
             logger.warning("Output blocked by safety filter.")
@@ -342,9 +344,9 @@ async def generate(
                         client=client, model_name=current_model, username=BOT_NAME)
 
         # Fire fact extraction async — only for user messages (role="user")
-        if guild_id and user_id and message_id and channel_id and text.strip() and role == "user":
+        if guild_id and user_id and message_id and channel_id and user_message_text.strip() and role == "user":
             asyncio.create_task(extract_and_store_fact(
-                message_content=text,
+                message_content=user_message_text,
                 display_name=username,
                 guild_id=guild_id,
                 user_id=user_id,
