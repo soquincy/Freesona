@@ -304,6 +304,8 @@ async def generate(
 
     if user_text:
         parts.append(types.Part(text=user_text))
+    if username:
+        user_text = f"[{username}]: {user_text}"
     for att_bytes, att_mime in (attachments or []):
         parts.append(types.Part.from_bytes(data=att_bytes, mime_type=att_mime))
     if not parts:
