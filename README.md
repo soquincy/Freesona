@@ -38,6 +38,14 @@ cd Freesona
 pip install -r requirements.txt
 ```
 
+Note for Windows users: Python's `zoneinfo` may lack IANA time zone data on some Windows installs. Install `tzdata` in your environment so `/settimezone` (and other `ZoneInfo` lookups) work correctly:
+
+```powershell
+.venv\Scripts\pip.exe install tzdata
+```
+
+`tzdata` is included in `requirements.txt` so it will be installed with `pip install -r requirements.txt` on new setups.
+
 Before pushing changes, run the local checks:
 
 ```bash
