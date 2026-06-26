@@ -34,7 +34,7 @@ The bot keeps a rolling window of the last 5 messages per channel. Older history
 
 After each user message, the bot runs a background fact extraction pass — asking Gemini whether the message reveals anything worth remembering (name, job, location, interests, projects, relationships). Facts are scored by importance (0.0–1.0), deduplicated by message ID, and capped at 20 per user. Facts below 0.3 importance are dropped. The top facts are injected into the system prompt for future conversations with that user.
 
-Stored in `memory.json`, keyed by `guild_id:user_id`. Survives restarts.
+Stored in `memory.db`, keyed by `guild_id:user_id`. Survives restarts.
 
 ### User distinction
 
@@ -75,7 +75,7 @@ Attach an image, PDF, audio file, video, or code file to any AI command or conve
 
 ## Web Search
 
-`~search <query>` fetches live results via Google Custom Search and summarizes them using the active persona. Requires `GOOGLE_SEARCH_API_KEY` and `SEARCH_ENGINE_ID`.
+`~search <query>` fetches results using Gemini grounding first. If grounding is unavailable, it falls back to legacy Google Custom Search. Requires `GOOGLE_API_KEY`; `GOOGLE_SEARCH_API_KEY` and `SEARCH_ENGINE_ID` are optional for the fallback path.
 
 ---
 

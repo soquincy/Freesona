@@ -1,4 +1,4 @@
-# cogs/ytdlp.py: yt-dlp video downloader
+# cogs/media/ytdlp.py: yt-dlp video downloader
 
 import asyncio
 import logging

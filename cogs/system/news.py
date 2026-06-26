@@ -1,4 +1,4 @@
-# cogs/news.py: RSS/Atom news feed commands + auto-posting loop.
+# cogs/system/news.py: RSS/Atom news feed commands + auto-posting loop.
 
 import os
 import asyncio
@@ -176,7 +176,6 @@ class NewsCog(commands.Cog):
 
     @commands.hybrid_group(
         name="rss",
-        invoke_without_command=True,
         help="Read and manage RSS news feeds.",
     )
     async def rss_group(self, ctx):

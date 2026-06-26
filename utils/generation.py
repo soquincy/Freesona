@@ -15,7 +15,7 @@ from google.genai import types
 
 from utils.memory import memory_to_contents, push_memory, inject_user_memory, extract_and_store_fact
 from utils.security import sanitize_prompt, unsafe_output
-from utils.config import LAST_DEBUG
+from utils.config import LAST_DEBUG, get_model_name
 
 load_dotenv()
 
@@ -23,7 +23,6 @@ logger = logging.getLogger("FreesonaBot")
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 BOT_NAME       = os.getenv("BOT_NAME", "Bot")
-MODEL_NAME     = "gemini-flash-lite-latest"
 
 # Split messaging
 SPLIT_MIN_LENGTH     = 280
@@ -319,9 +318,10 @@ async def generate(
             system_instruction=persona if apply_persona else None,
             max_output_tokens=1024,
         )
+        current_model = get_model_name()
         response = await asyncio.to_thread(
             client.models.generate_content,
-            model=MODEL_NAME,
+            model=current_model,
             contents=contents,
             config=config,
         )
@@ -337,9 +337,9 @@ async def generate(
 
         if channel_id is not None and role in ("user", "webhook"):
             push_memory(channel_id, role, display_text, display_text,
-                        client=client, model_name=MODEL_NAME, username=username)
+                        client=client, model_name=current_model, username=username)
             push_memory(channel_id, "model", f"{BOT_NAME}: {text}", f"{BOT_NAME}: {text}",
-                        client=client, model_name=MODEL_NAME, username=BOT_NAME)
+                        client=client, model_name=current_model, username=BOT_NAME)
 
         # Fire fact extraction async — only for user messages (role="user")
         if guild_id and user_id and message_id and channel_id and text.strip() and role == "user":
@@ -351,7 +351,7 @@ async def generate(
                 message_id=message_id,
                 channel_id=channel_id,
                 client=client,
-                model_name=MODEL_NAME,
+                model_name=current_model,
             ))
 
         return build_response(text)

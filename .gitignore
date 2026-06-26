@@ -51,3 +51,4 @@ htmlcov/
 # Debugging
 debug.log
 commands_dump.yaml
+.continue/mcpServers/new-mcp-server.yaml

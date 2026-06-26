@@ -1,4 +1,4 @@
-# cogs/status.py: Discord status modifier and changes text status every 5 mins to the servers it has joined (if multiple.)
+# cogs/system/status.py: Discord status modifier and changes text status every 5 mins to the servers it has joined (if multiple.)
 # May add "watching X servers" or something like that if it only has one server or I could make it catch random quotes. Who knows.
 
 import discord

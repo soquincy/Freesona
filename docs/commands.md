@@ -1,19 +1,26 @@
 # Command Reference
 
-Default prefix is `~`. Change it with `~prefix <symbol>`. All commands work as both prefix and slash commands unless noted.
+Default prefix is `~`. Change it with `~prefix <symbol>`. Most commands work as both prefix and slash commands. `/setpersona` and `/autonomy` are slash-only because they use Discord UI interactions.
 
-## AI
+## AI Commands
 
 | Command | Action | Permissions |
 | :--- | :--- | :--- |
-| `~write <prompt>` | Structured output using active persona | Anyone |
-| `~ask <question>` | Conversational response using active persona | Anyone |
-| `~search <query>` | Web search with AI summary | Anyone |
-| `~separate <url>` | Vocal/instrumental separation via MVSEP | Anyone |
+| `~write <prompt>` (`/write`, alias `~w`) | Structured output using active persona | Anyone |
+| `~ask <question>` (`/ask`, alias `~a`) | Conversational response using active persona | Anyone |
+| `~search <query>` (`/search`, alias `~s`) | Web search with AI summary | Anyone |
+| `~separate <url>` (`/separate`, aliases `~sep`, `~stems`) | Vocal/instrumental separation via MVSEP | Anyone |
+
+## RSS / News
+
+| Command | Action | Permissions |
+| :--- | :--- | :--- |
 | `/rss latest <feed>` | Show latest items from an RSS/Atom feed | Anyone |
-| `/rss list` | List configured RSS/Atom feeds | Anyone |
-| `/rss add <name> <url>` | Add or update an RSS/Atom feed | Administrator |
-| `/rss remove <name>` | Remove a custom RSS/Atom feed | Administrator |
+| `/rss list` | List configured RSS feeds | Anyone |
+| `/rss add <name> <url>` | Add or update an RSS feed | Administrator |
+| `/rss remove <name>` | Remove an RSS feed | Administrator |
+| `/rss setchannel <#channel>` | Set RSS auto-post channel | Administrator |
+| `/rss clearchannel` | Disable RSS auto-posting | Administrator |
 
 ## Conversation Channel
 
@@ -21,25 +28,27 @@ Default prefix is `~`. Change it with `~prefix <symbol>`. All commands work as b
 | :--- | :--- | :--- |
 | `/setchannel #channel` | Set the AI conversation channel | Administrator |
 | `/clearchannel` | Remove the conversation channel | Administrator |
-| `/clearmemory` | Wipe short-term channel memory and summary | Administrator |
+| `/clearmemory` | Clear short-term channel memory | Administrator |
 | `/chatmode <all/mentions/smart>` | Set when the bot replies in the conversation channel | Administrator |
 
-The bot responds to all messages in the conversation channel. It keeps the last 5 messages as context and summarizes older history automatically. Every message is tagged with the sender's display name so the bot can tell users apart.
+The bot responds to messages in the configured conversation channel. It keeps the last 5 messages as context and summarizes older history automatically. Every message is tagged with the sender's display name so the bot can tell users apart.
 
-## Persona
+## Persona & Memory
 
 | Command | Action | Permissions |
 | :--- | :--- | :--- |
 | `/setpersona` | Open the button-based persona editor | Bot Owner |
-| `/personalock` | Lock persona against changes | Bot Owner |
-| `/personaunlock` | Unlock persona | Bot Owner |
-| `/personasave <name>` | Save current persona as a preset | Bot Owner |
-| `/personaload <name>` | Load a saved persona preset | Bot Owner |
-| `/personalist` | List all saved presets | Bot Owner |
-| `/personadelete <name>` | Delete a saved preset | Bot Owner |
-| `/debugpersona` | Show active persona, last prompt, model, lock state, autonomy | Bot Owner |
-| `/memorylist <user>` | List long-term memory facts for a user | Administrator |
-| `/memoryclear <user>` | Clear long-term memory facts for a user | Administrator |
+| `/personalock` (`~personalock`, alias `~plock`) | Lock persona against changes | Bot Owner |
+| `/personaunlock` (`~personaunlock`, alias `~pulock`) | Unlock persona | Bot Owner |
+| `/personasave <name>` (`~personasave`, alias `~psave`) | Save current persona as a preset | Bot Owner |
+| `/personaload <name>` (`~personaload`, alias `~pload`) | Load a saved persona preset | Bot Owner |
+| `/personalist` (`~personalist`, alias `~plist`) | List saved persona presets | Bot Owner |
+| `/personadelete <name>` (`~personadelete`, alias `~pdel`) | Delete a saved persona preset | Bot Owner |
+| `/debugpersona` (`~debugpersona`, alias `~pdeb`) | Show active persona, last prompt, model, lock state, autonomy | Bot Owner |
+| `/memorylist <user>` (`~memorylist`, alias `~meml`) | List long-term memory facts for a user | Administrator |
+| `/memoryclear <user>` (`~memoryclear`, alias `~memcl`) | Clear long-term memory facts for a user | Administrator |
+| `/memorydelete <index> [user]` (`~memorydelete`, alias `~memdel`) | Delete a specific memory fact | Administrator |
+| `/migrate` (`~migrate`) | Migrate memory data to SQLite | Administrator |
 
 ## Runtime Controls
 
@@ -52,6 +61,13 @@ The bot responds to all messages in the conversation channel. It keeps the last 
 | `/model show` | Show the active Gemini model | Bot Owner |
 | `/model set <name>` | Set the active Gemini model | Bot Owner |
 | `/model reset` | Reset to the environment/default model | Bot Owner |
+| `/botwhitelist` (`~botwhitelist`, alias `~bw`) | List whitelisted bot IDs | Administrator |
+| `/botwhitelist add <bot_id>` | Add a bot ID to the whitelist | Administrator |
+| `/botwhitelist remove <bot_id>` | Remove a bot ID from the whitelist | Administrator |
+| `/sync` | Sync global slash commands | Bot Owner |
+| `/settimezone <timezone>` | Set the bot's timezone | Administrator |
+| `/timezone` | Show the bot's currently configured timezone | Anyone |
+| `/setanniversarychannel <channel>` | Set the anniversary announcement channel | Administrator |
 
 Module and model names include slash-command suggestions.
 
@@ -69,24 +85,30 @@ Autonomous mode uses a confidence-scored intent evaluator (not random chance). T
 
 | Command | Action | Permissions |
 | :--- | :--- | :--- |
+| `~help [command]` | Show help for commands | Anyone |
 | `~prefix <symbol>` | Change command prefix | Administrator |
 | `~purge <limit>` | Delete messages (1–1000) | Manage Messages |
 | `~kick <member> [reason]` | Kick a member | Kick Members |
 | `~ban <user> [reason]` | Ban a user | Ban Members |
 | `~unban <user> [reason]` | Unban a user | Ban Members |
-| `~timeout <member> <duration> [reason]` | Timeout a member (e.g. `10m`, `1h`) | Moderate Members |
-| `~removetimeout <member>` | Remove a timeout | Moderate Members |
-| `~math <equation>` | Solve an equation via Wolfram\|Alpha | Anyone |
-| `~download <url>` | Download video (1080p/720p/480p/compressed) | Anyone |
-| `~audio <url>` | Download audio as MP3 | Anyone |
+| `~timeout <member> <duration> [reason]` (`~to`) | Timeout a member (e.g. `10m`, `1h`) | Moderate Members |
+| `~removetimeout <member>` (`~rt`, `~rto`) | Remove a timeout | Moderate Members |
+| `~warn <member\|id> [reason]` | Warn a member | Administrator |
+| `~warns <member\|id>` | Show warnings for a member | Administrator |
+| `~delwarn <warn_id>` | Delete a warning by ID | Administrator |
+| `~clearwarns <member\|id>` | Clear warnings for a member | Administrator |
+| `~warnthresholds` (`~wt`) | View/edit auto-punishment thresholds | Administrator |
+| `/math <equation>` | Solve an equation via Wolfram\|Alpha | Anyone |
+| `~download <url>` (`~dl`) | Download a video | Anyone |
+| `~audio <url>` (`~mp3`) | Download audio as MP3 | Anyone |
 | `~ping` | Show bot and Discord API latency | Anyone |
-| `~hello` | Says hello | Anyone |
 
-## Random
+## Fun
 
-| Command                         | Action                                      | Permissions |
-| :------------------------------ | :------------------------------------------ | :---------- |
-| `~randommember`                 | Randomly selects a server member            | Anyone      |
-| `~coinflip`                     | Flips a coin                                | Anyone      |
-| `~roll [sides]`                 | Rolls a die (default: 6 sides)              | Anyone      |
-| `~pick <choice1, choice2, ...>` | Randomly picks from comma-separated choices | Anyone      |
+| Command | Action | Permissions |
+| :--- | :--- | :--- |
+| `~hello` | Say hello back | Anyone |
+| `~randommember` | Randomly selects a server member | Anyone |
+| `~coinflip` | Flips a coin | Anyone |
+| `~roll [sides]` | Rolls a die (default: 6 sides) | Anyone |
+| `~pick <choice1, choice2, ...>` | Randomly picks from comma-separated choices | Anyone |

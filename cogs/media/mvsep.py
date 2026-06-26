@@ -1,8 +1,8 @@
-# cogs/mvsep.py: MVSEP audio source separation (vocals/instrumental via BS Roformer)
+# cogs/media/mvsep.py: MVSEP audio source separation (vocals/instrumental via BS Roformer)
 # YES I make mashups and I need this shut up. You may disable this module with /module disable mvsep if you don't care about separating audio;
 # But hey it's a fun party trick and it works surprisingly well for a free API.
 
-# Current problem: no way to get progress updates or queue position; no way to cancel; links expire after some time; only one job at a time on free tier.
+# Current problem: no way to cancel; links expire after some time; only one job at a time on free tier.
 # But hey it works and it's free so I'm not complaining. My broke ass appreciates it.
 
 import os
@@ -19,12 +19,20 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 from pathlib import Path
+from fastapi_server import register_mvsep_job, unregister_mvsep_job
 from utils.security import is_public_http_url
 
 load_dotenv()
 
 MVSEP_API_KEY = os.getenv("MVSEP_API_KEY")
 BOT_NAME      = os.getenv("BOT_NAME", "Bot")
+MVSEP_WEBHOOK_URL = os.getenv("MVSEP_WEBHOOK_URL")
+MVSEP_WEBHOOK_SEND_MAIL_ON_ERROR = os.getenv("MVSEP_WEBHOOK_SEND_MAIL_ON_ERROR", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 # BS Roformer ver 2025.07 — SDR vocals: 11.89, SDR instrum: 18.20
 SEP_TYPE  = 40
@@ -87,6 +95,21 @@ def stem_label(file_info: dict, index: int) -> str:
     return f"Stem {index + 1}"
 
 
+def mvsep_status_text(status: str, queue_pos: object, job_hash: str) -> str:
+    labels = {
+        "waiting": "Queued",
+        "processing": "Processing",
+        "distributing": "Preparing downloads",
+        "merging": "Merging stems",
+    }
+    label = labels.get(status, status.title())
+
+    if queue_pos not in (None, ""):
+        return f"⏳ {label}. Queue position: `{queue_pos}`. (`{job_hash}`)"
+
+    return f"⏳ {label}. (`{job_hash}`)"
+
+
 class MVSepCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot   = bot
@@ -109,6 +132,11 @@ class MVSepCog(commands.Cog):
         data.add_field("sep_type",      str(SEP_TYPE))
         data.add_field("add_opt1",      str(ADD_OPT1))
         data.add_field("output_format", str(OUT_FMT))
+
+        if MVSEP_WEBHOOK_URL:
+            data.add_field("webhook_url", MVSEP_WEBHOOK_URL)
+            if MVSEP_WEBHOOK_SEND_MAIL_ON_ERROR:
+                data.add_field("send_mail_on_error", "1")
 
         if file_path:
             assert file_path is not None
@@ -135,9 +163,10 @@ class MVSepCog(commands.Cog):
     #           distributing | merging
     # ------------------------------------------------------------------
 
-    async def _poll(self, session: aiohttp.ClientSession, job_hash: str) -> dict:
+    async def _poll(self, session: aiohttp.ClientSession, job_hash: str, status_msg=None) -> dict:
         endpoint = f"https://mvsep.com/api/separation/get?hash={job_hash}"
         elapsed  = 0
+        last_status_text = None
 
         while elapsed < POLL_TIMEOUT:
             await asyncio.sleep(POLL_INTERVAL)
@@ -162,14 +191,71 @@ class MVSepCog(commands.Cog):
             if status in IN_PROGRESS:
                 # Log queue position if available
                 queue_pos = payload.get("data", {}).get("current_order")
-                if queue_pos:
+                if queue_pos not in (None, ""):
                     logger.info(f"MVSEP job {job_hash} — status: {status}, queue position: {queue_pos}")
+
+                if status_msg is not None:
+                    status_text = mvsep_status_text(status, queue_pos, job_hash)
+                    if status_text != last_status_text:
+                        await status_msg.edit(content=status_text)
+                        last_status_text = status_text
                 continue
 
             # Unknown status — keep waiting
             logger.warning(f"MVSEP unknown status: {status}")
 
         raise TimeoutError("Job timed out after 10 minutes.")
+
+    async def _wait_for_webhook(self, session: aiohttp.ClientSession, job_hash: str, status_msg=None) -> dict:
+        endpoint = f"https://mvsep.com/api/separation/get?hash={job_hash}"
+        future = asyncio.get_running_loop().create_future()
+        register_mvsep_job(job_hash, future)
+        elapsed = 0
+        last_status_text = None
+
+        try:
+            while elapsed < POLL_TIMEOUT:
+                try:
+                    return await asyncio.wait_for(asyncio.shield(future), timeout=POLL_INTERVAL)
+                except asyncio.TimeoutError:
+                    elapsed += POLL_INTERVAL
+
+                async with session.get(endpoint) as resp:
+                    payload = await resp.json()
+
+                status = payload.get("status", "unknown")
+                self._raise_for_terminal_status(payload)
+
+                if status == "done":
+                    return payload
+
+                if status in IN_PROGRESS:
+                    queue_pos = payload.get("data", {}).get("current_order")
+                    if queue_pos not in (None, ""):
+                        logger.info(f"MVSEP job {job_hash} — status: {status}, queue position: {queue_pos}")
+
+                    if status_msg is not None:
+                        status_text = mvsep_status_text(status, queue_pos, job_hash)
+                        if status_text != last_status_text:
+                            await status_msg.edit(content=status_text)
+                            last_status_text = status_text
+                    continue
+
+                logger.warning(f"MVSEP unknown status while waiting for webhook: {status}")
+
+            raise TimeoutError("Job timed out after 10 minutes.")
+        finally:
+            unregister_mvsep_job(job_hash)
+
+    def _raise_for_terminal_status(self, payload: dict) -> None:
+        status = payload.get("status", "unknown")
+
+        if status == "failed":
+            reason = payload.get("data", {}).get("message", "No reason given.")
+            raise RuntimeError(f"Separation failed: {reason}")
+
+        if status == "not_found":
+            raise RuntimeError("Job hash not found — it may have expired.")
 
     # ------------------------------------------------------------------
     # Input resolver: attachment > direct URL > yt-dlp: I'm starting to think that this dosen't support direct URLs. May fix this later.
@@ -298,16 +384,40 @@ class MVSepCog(commands.Cog):
                         return
 
                     job_hash = result["data"]["hash"]
-                    await status_msg.edit(
-                        content=f"✅ Job submitted. Polling every {POLL_INTERVAL}s... (`{job_hash}`)"
-                    )
+                    if MVSEP_WEBHOOK_URL:
+                        await status_msg.edit(
+                            content=f"✅ Job submitted. Waiting for MVSEP webhook... (`{job_hash}`)"
+                        )
+                    else:
+                        await status_msg.edit(
+                            content=f"✅ Job submitted. Polling every {POLL_INTERVAL}s... (`{job_hash}`)"
+                        )
 
-                    # Poll
-                    try:
-                        done = await self._poll(session, job_hash)
-                    except (RuntimeError, TimeoutError) as e:
-                        await status_msg.edit(content=f"❌ {e}")
-                        return
+                    done = None
+
+                    if MVSEP_WEBHOOK_URL:
+                        try:
+                            webhook_payload = await self._wait_for_webhook(session, job_hash, status_msg)
+                            self._raise_for_terminal_status(webhook_payload)
+                            if webhook_payload.get("status") == "done":
+                                done = webhook_payload
+                            else:
+                                status = webhook_payload.get("status")
+                                logger.warning(f"MVSEP webhook returned non-terminal status: {status}")
+                        except asyncio.TimeoutError:
+                            await status_msg.edit(
+                                content=f"⚠️ Webhook timed out. Polling every {POLL_INTERVAL}s... (`{job_hash}`)"
+                            )
+                        except RuntimeError as e:
+                            await status_msg.edit(content=f"❌ {e}")
+                            return
+
+                    if done is None:
+                        try:
+                            done = await self._poll(session, job_hash, status_msg)
+                        except (RuntimeError, TimeoutError) as e:
+                            await status_msg.edit(content=f"❌ {e}")
+                            return
 
             # Build result embed
             data_block = done.get("data", {})

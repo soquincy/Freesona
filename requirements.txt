@@ -27,3 +27,4 @@ uvicorn
 aiohttp
 yt-dlp
 aiosqlite
+tzdata

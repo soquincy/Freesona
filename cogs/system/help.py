@@ -1,4 +1,4 @@
-# cogs/help.py: Help index
+# cogs/system/help.py: Help index
 # Obviosly if you need help this is the cog to go to. Lolz.
 # Buttons. Yay!
 
@@ -153,7 +153,7 @@ class HelpCog(commands.Cog):
 
                 if cmd.name in ['hello', 'write', 'ask', 'randommember', 'coinflip', 'roll', 'pick']:
                     cats["Fun"].append(entry)
-                elif cmd.name in ['kick', 'purge', 'removetimeout', 'timeout', 'ban', 'unban']:
+                elif cmd.name in ['kick', 'purge', 'removetimeout', 'timeout', 'ban', 'unban', 'softban', 'warn', 'warns', 'delwarn', 'clearwarns', 'warnthresholds']:
                     cats["Moderation"].append(entry)
                 elif cmd.name in ['math', 'search', 'help', 'ping']:
                     cats["Utility"].append(entry)
@@ -236,5 +236,6 @@ class HelpCog(commands.Cog):
         if isinstance(commands_map, dict):
             return commands_map.get(name)
         return None
+
 async def setup(bot):
     await bot.add_cog(HelpCog(bot))
