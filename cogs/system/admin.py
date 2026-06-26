@@ -1,5 +1,7 @@
-# cogs/admin.py: Owner/admin runtime controls.
+# cogs/system/admin.py: Owner/admin runtime controls.
 
+import io
+import json
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -216,17 +218,20 @@ class AdminCog(commands.Cog):
         await ctx.send(f"Timezone set to `{timezone}`.", ephemeral=True if ctx.interaction else False)
 
     # ------------------------------------------------------------------
-    # /setanniversarychannel
+    # /dumpconfig
     # ------------------------------------------------------------------
-    @commands.hybrid_command(name="setanniversarychannel", help="Set the channel for album anniversary announcements.", usage="<channel>")
-    @app_commands.describe(channel="The channel to post anniversary announcements in.")
-    @commands.has_permissions(administrator=True)
-    async def setanniversarychannel_cmd(self, ctx, channel: discord.TextChannel):
+    @commands.hybrid_command(name="dumpconfig", help="Dumps the current config.json contents (Owner only).")
+    @commands.is_owner()
+    async def dumpconfig_cmd(self, ctx):
         config = load_config()
-        config["anniversary_channel_id"] = channel.id
-        save_config(config)
-        await ctx.send(f"Anniversary announcements will be posted in {channel.mention}.", ephemeral=True if ctx.interaction else False)
-
+        formatted = json.dumps(config, indent=2)
+        if len(formatted) > 1990:
+            await ctx.send(
+                file=discord.File(fp=io.BytesIO(formatted.encode("utf-8")), filename="config.json"),
+                ephemeral=True if ctx.interaction else False
+            )
+        else:
+            await ctx.send(f"```json\n{formatted}\n```", ephemeral=True if ctx.interaction else False)
 
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))
