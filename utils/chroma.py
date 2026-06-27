@@ -1,5 +1,9 @@
+# utils/chroma.py: ChromaDB utility functions for managing and querying a ChromaDB collection.
 import os
 from typing import Any
+
+import logging
+logger = logging.getLogger("FreesonaBot")
 
 try:
     import chromadb
@@ -30,11 +34,14 @@ def query_knowledge(query: str, limit: int = 3, collection_name: str | None = No
     collection = get_collection(collection_name)
     if collection is None:
         return []
+    
     try:
         result = collection.query(query_texts=[query], n_results=limit)
-    except Exception:
+        docs = result.get("documents", []) or []
+        
+        # Flatten structure: Chroma returns [[doc1, doc2]]
+        flattened = [item for sublist in docs for item in sublist]
+        return [doc for doc in flattened if isinstance(doc, str) and doc.strip()]
+    except Exception as e:
+        logger.error(f"Chroma query error: {e}")
         return []
-    documents = result.get("documents", []) or []
-    if not documents:
-        return []
-    return [doc for chunk in documents for doc in chunk if isinstance(doc, str) and doc.strip()]

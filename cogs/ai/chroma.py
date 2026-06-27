@@ -1,3 +1,4 @@
+# cogs/ai/chroma.py: ChromaDB Cog for Discord bot to search a local knowledge base.
 import discord
 from discord.ext import commands
 

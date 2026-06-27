@@ -366,15 +366,20 @@ async def generate(
         if prev_id:
             kwargs["previous_interaction_id"] = prev_id
 
-        interaction = await asyncio.to_thread(
-            client.interactions.create,
-            **kwargs,
-        )
+        if client:
+            interaction = await asyncio.to_thread(client.interactions.create, **kwargs)
+        else:
+            # Handle non-Gemini path if needed, or ensure this branch is only reached for Gemini
+            raise RuntimeError("Gemini client not initialized.")
 
-        if not interaction or not interaction.output_text:
+
+        output_text = getattr(interaction, "output_text", None)
+        interaction_id = getattr(interaction, "id", None)
+
+        if not interaction or not output_text:
             raise MalformedResponseError("Empty response from model.")
 
-        output = clean_text(interaction.output_text)
+        output = clean_text(output_text)
 
         if unsafe_output(output):
             logger.warning("Output blocked by safety filter.")
@@ -382,7 +387,9 @@ async def generate(
 
         # Persist interaction ID for conversation continuity
         if channel_id is not None and role in ("user", "webhook"):
-            set_interaction_id(channel_id, interaction.id)
+            # Ensure interaction_id is not None before calling set_interaction_id
+            if interaction_id:
+                set_interaction_id(channel_id, str(interaction_id))
 
         # Fire fact extraction async — only for real user messages
         if guild_id and user_id and message_id and channel_id and text.strip() and role == "user":
