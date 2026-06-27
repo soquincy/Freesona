@@ -16,6 +16,8 @@
 # aiohttp: Handles async HTTP requests, used in the Cobalt downloader cog.
 # yt-dlp: CLI tool for downloading YouTube/TikTok/Twitter videos.
 # aiosqlite: Handles databses for memory.db
+# tzdata: Provides timezone data for accurate time handling in the bot.
+# pypdf: Handles PDF files for the Chroma cog.
 
 discord.py
 python-dotenv
@@ -28,3 +30,4 @@ aiohttp
 yt-dlp
 aiosqlite
 tzdata
+pypdf
