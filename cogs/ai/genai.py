@@ -223,7 +223,7 @@ class GenAICog(commands.Cog):
             if channel_ready and user_ready:
                 # Autonomy doesn't track a channel interaction ID, so we pass
                 # has_memory=False — it fires as a standalone contextual response.
-                intent = evaluate_intent(message, self.bot.user, has_memory=False)
+                intent = evaluate_intent(message, self.bot.user, False)
 
                 if intent.intent != INTENT_IGNORE and intent.confidence >= threshold:
                     _autonomy_cooldown[message.channel.id]     = now
