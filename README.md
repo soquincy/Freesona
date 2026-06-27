@@ -138,15 +138,28 @@ Admins can control optional modules without editing `main.py`:
 /module reload <name>
 ```
 
-The bot owner can switch Gemini models without restarting:
+The bot owner can switch Gemini models without restarting, sync global slash commands, and inspect the active config:
 
 ```text
 /model show
 /model set <model>
 /model reset
+/sync
+/dumpconfig
 ```
 
-Conversation channel behavior can be narrowed with `/chatmode all`, `/chatmode mentions`, or `/chatmode smart`.
+Timezone and autonomy are also configurable at runtime:
+
+```text
+/settimezone <timezone>
+/timezone
+/autonomy on
+/autonomy off
+/autonomy frequency <low/default/high>
+/chatmode all
+/chatmode mentions
+/chatmode smart
+```
 
 RSS/Atom feeds can be read and managed with:
 

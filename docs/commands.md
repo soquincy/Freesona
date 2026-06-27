@@ -45,9 +45,9 @@ The bot responds to messages in the configured conversation channel. It keeps th
 | `/personalist` (`~personalist`, alias `~plist`) | List saved persona presets | Bot Owner |
 | `/personadelete <name>` (`~personadelete`, alias `~pdel`) | Delete a saved persona preset | Bot Owner |
 | `/debugpersona` (`~debugpersona`, alias `~pdeb`) | Show active persona, last prompt, model, lock state, autonomy | Bot Owner |
-| `/memorylist <user>` (`~memorylist`, alias `~meml`) | List long-term memory facts for a user | Administrator |
-| `/memoryclear <user>` (`~memoryclear`, alias `~memcl`) | Clear long-term memory facts for a user | Administrator |
-| `/memorydelete <index> [user]` (`~memorydelete`, alias `~memdel`) | Delete a specific memory fact | Administrator |
+| `/memorylist <user>` (`~memorylist`, alias `~meml`) | List long-term memory facts for a user | User / Administrator |
+| `/memoryclear <user>` (`~memoryclear`, alias `~memcl`) | Clear long-term memory facts for a user | User / Administrator |
+| `/memorydelete <index> [user]` (`~memorydelete`, alias `~memdel`) | Delete a specific memory fact | User / Administrator |
 | `/migrate` (`~migrate`) | Migrate memory data to SQLite | Administrator |
 
 ## Runtime Controls
@@ -65,6 +65,7 @@ The bot responds to messages in the configured conversation channel. It keeps th
 | `/botwhitelist add <bot_id>` | Add a bot ID to the whitelist | Administrator |
 | `/botwhitelist remove <bot_id>` | Remove a bot ID from the whitelist | Administrator |
 | `/sync` | Sync global slash commands | Bot Owner |
+| `/dumpconfig` | Dump current `config.json` contents | Bot Owner |
 | `/settimezone <timezone>` | Set the bot's timezone | Administrator |
 | `/timezone` | Show the bot's currently configured timezone | Anyone |
 | `/setanniversarychannel <channel>` | Set the anniversary announcement channel | Administrator |
