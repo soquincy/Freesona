@@ -9,6 +9,7 @@ Default prefix is `~`. Change it with `~prefix <symbol>`. Most commands work as 
 | `~write <prompt>` (`/write`, alias `~w`) | Structured output using active persona | Anyone |
 | `~ask <question>` (`/ask`, alias `~a`) | Conversational response using active persona | Anyone |
 | `~search <query>` (`/search`, alias `~s`) | Web search with AI summary | Anyone |
+| `/kbsearch <query>` | Search a local ChromaDB knowledge base | Anyone |
 | `~separate <url>` (`/separate`, aliases `~sep`, `~stems`) | Vocal/instrumental separation via MVSEP | Anyone |
 
 ## RSS / News
@@ -58,9 +59,9 @@ The bot responds to messages in the configured conversation channel. It keeps th
 | `/module enable <name>` | Enable and load a module | Administrator |
 | `/module disable <name>` | Disable and unload a module | Administrator |
 | `/module reload <name>` | Reload an enabled module | Administrator |
-| `/model show` | Show the active Gemini model | Bot Owner |
-| `/model set <name>` | Set the active Gemini model | Bot Owner |
-| `/model reset` | Reset to the environment/default model | Bot Owner |
+| `/model show` | Show the active provider and model | Bot Owner |
+| `/model set <name>` | Set the active model for the configured provider | Bot Owner |
+| `/model reset` | Reset to the environment/default provider model | Bot Owner |
 | `/botwhitelist` (`~botwhitelist`, alias `~bw`) | List whitelisted bot IDs | Administrator |
 | `/botwhitelist add <bot_id>` | Add a bot ID to the whitelist | Administrator |
 | `/botwhitelist remove <bot_id>` | Remove a bot ID from the whitelist | Administrator |

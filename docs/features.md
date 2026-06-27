@@ -12,7 +12,7 @@ Freesona's persona is split into five structured fields edited through a button-
 | Language & Communication Style | `/setpersona` |
 | System Instructions | `/setpersona` |
 
-Changes take effect immediately. The assembled persona is injected as the Gemini system instruction on every generation call.
+Changes take effect immediately. The assembled persona is injected as the active provider's system instruction on every generation call.
 
 **Persona profiles** — save, load, list, and delete named presets with `/personasave`, `/personaload`, `/personalist`, `/personadelete`. Useful for switching between characters or server contexts.
 
@@ -39,6 +39,27 @@ Stored in `memory.db`, keyed by `guild_id:user_id`. Survives restarts.
 ### User distinction
 
 Every message stored in short-term memory is prefixed with the sender's display name (`Username: <message>`). This means Gemini sees attributed turns and can tell users apart in a multi-user channel — responses stay contextually accurate even when several people are talking at once.
+
+---
+
+## Multiple AI Providers
+
+Freesona now routes generation through a provider abstraction so the same commands can target different backends without changing command code. Supported providers include:
+
+- Gemini (default)
+- OpenAI
+- Ollama
+- NVIDIA NIM
+
+Configure the backend with `AI_PROVIDER` and `AI_PROVIDER_MODEL`, then add any provider-specific credentials such as `GOOGLE_API_KEY`, `OPENAI_API_KEY`, `NVIDIA_API_KEY`, or `NIM_API_KEY`.
+
+---
+
+## ChromaDB Knowledge Base
+
+An optional ChromaDB-backed retrieval layer is available for knowledge lookups during generation. The current implementation exposes a lightweight `/kbsearch` command and can inject matching documents into the prompt context for semantic recall.
+
+This is a natural fit for the roadmap's knowledge-base feature. The next step is to add a full write/manage flow for `/kbadd`, `/kblist`, and `/kbdelete`, while keeping the retrieval path local and optional.
 
 ---
 

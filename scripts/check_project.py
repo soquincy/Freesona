@@ -94,6 +94,14 @@ def check_public_url_guard() -> None:
     assert not security.is_public_http_url("http://169.254.1.1/file.mp3")
 
 
+def check_provider_helpers() -> None:
+    providers = reload_local_module("utils.providers")
+    provider_name = providers.get_provider_name()
+    assert provider_name in {"gemini", "openai", "ollama", "nim"}
+    assert providers.get_provider_model() is not None
+    assert providers.build_messages("system", "user")
+
+
 def load_mvsep_helpers() -> dict:
     source = (ROOT / "cogs" / "media" / "mvsep.py").read_text(encoding="utf-8")
     module = ast.parse(source)

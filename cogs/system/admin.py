@@ -8,6 +8,7 @@ from discord.ext import commands
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from utils.config import load_config, save_config, get_model_name
+from utils.providers import get_provider_config
 from utils.modules import OPTIONAL_MODULES, load_enabled_modules, module_extension, save_module_state
 
 MODEL_CHOICES = [
@@ -155,32 +156,38 @@ class AdminCog(commands.Cog):
     # ------------------------------------------------------------------
     # /model
     # ------------------------------------------------------------------
-    @commands.hybrid_group(name="model", fallback="current", help="Show or change the Gemini model.")
+    @commands.hybrid_group(name="model", fallback="current", help="Show or change the active model.")
     @commands.is_owner()
     async def model_group(self, ctx):
-        await ctx.send(f"Current model: `{get_model_name()}`", ephemeral=True if ctx.interaction else False)
+        config = get_provider_config()
+        await ctx.send(f"Current provider: `{config['provider']}`\nCurrent model: `{config['model']}`", ephemeral=True if ctx.interaction else False)
 
-    @model_group.command(name="show", help="Show the active Gemini model.")
+    @model_group.command(name="show", help="Show the active provider and model.")
     @commands.is_owner()
     async def model_show(self, ctx):
-        await ctx.send(f"Current model: `{get_model_name()}`", ephemeral=True if ctx.interaction else False)
+        config = get_provider_config()
+        await ctx.send(f"Current provider: `{config['provider']}`\nCurrent model: `{config['model']}`", ephemeral=True if ctx.interaction else False)
 
-    @model_group.command(name="set", help="Set the Gemini model.")
+    @model_group.command(name="set", help="Set the active model.")
     @commands.is_owner()
     @app_commands.autocomplete(name=model_autocomplete)
     async def model_set(self, ctx, name: str):
         config = load_config()
         config["model_name"] = name.strip()
+        config["provider_model"] = name.strip()
         save_config(config)
-        await ctx.send(f"Model set to `{get_model_name()}`.", ephemeral=True if ctx.interaction else False)
+        config = get_provider_config()
+        await ctx.send(f"Model set to `{config['model']}`.", ephemeral=True if ctx.interaction else False)
 
-    @model_group.command(name="reset", help="Reset the Gemini model to the environment/default value.")
+    @model_group.command(name="reset", help="Reset the model to the environment/default value.")
     @commands.is_owner()
     async def model_reset(self, ctx):
         config = load_config()
         config.pop("model_name", None)
+        config.pop("provider_model", None)
         save_config(config)
-        await ctx.send(f"Model reset to `{get_model_name()}`.", ephemeral=True if ctx.interaction else False)
+        config = get_provider_config()
+        await ctx.send(f"Model reset to `{config['model']}`.", ephemeral=True if ctx.interaction else False)
 
     # ------------------------------------------------------------------
     # /sync

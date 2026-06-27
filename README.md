@@ -24,9 +24,13 @@ No credits. No voting. No "upgrade to unlock." Just a bot that does what you tel
 
 **It can chime in on its own — intelligently.** Autonomous mode uses a confidence-scored intent evaluator, not random chance. Per-channel cooldowns prevent it from dominating a conversation.
 
-**It handles more than text.** Attach images, PDFs, audio, video, or code files — all processed through Gemini's multimodal pipeline.
+**It handles more than text.** Attach images, PDFs, audio, video, or code files — all processed through the active provider's multimodal pipeline.
 
-**It's built to be extended.** Logic lives in `utils/` — generation, memory, persona, intent, security, search, and config are all separate modules. See [utils/README.md](utils/README.md).
+**It can target multiple AI backends.** The generation flow now supports Gemini, OpenAI, Ollama, and NVIDIA NIM through a shared provider abstraction, so the same commands work across different services.
+
+**It can also use a local knowledge base.** An optional ChromaDB-backed retrieval path is available for semantic lookups during generation, which fits the roadmap for a fuller `/kbadd`, `/kblist`, and `/kbdelete` experience.
+
+**It's built to be extended.** Logic lives in `utils/` — generation, memory, persona, intent, security, search, config, and provider routing are all separate modules. See [utils/README.md](utils/README.md).
 
 ---
 
@@ -198,12 +202,12 @@ Licensed under the **MIT License**. See [LICENSE](LICENSE).
 
 ### Medium-term
 
-* [ ] Multi-provider support — swap AI providers without changing command code
+* [x] Multi-provider support — swap AI providers without changing command code (Gemini, OpenAI, Ollama, NVIDIA NIM)
 * [ ] Message claiming system for multi-instance deployments
 * [x] RSS monitors — post matching feed items into selected channels
 * [ ] Optional generation logging — instance operators can enable local-only logs for abuse reporting and debugging; disabled by default, no data leaves the host
 
 ### Long-term
 
-* [ ] Knowledge base — `/kbadd`, `/kblist`, `/kbdelete`
+* [ ] Knowledge base — initial ChromaDB-backed retrieval is available; full `/kbadd`, `/kblist`, and `/kbdelete` commands are planned
 * [ ] Web dashboard via FastAPI — `fastapi_server.py` is already in the repo

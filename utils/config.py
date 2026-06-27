@@ -8,6 +8,10 @@ CONFIG_PATH = os.getenv("CONFIG_FILE_PATH", "config.json")
 DEFAULT_CONFIG = {
     "prefix": "~",
     "conversation_response_mode": "all",
+    "provider": os.getenv("AI_PROVIDER", "gemini"),
+    "provider_model": os.getenv("AI_PROVIDER_MODEL", ""),
+    "chroma_collection": os.getenv("CHROMA_COLLECTION", "freesona"),
+    "chroma_persist_directory": os.getenv("CHROMA_PERSIST_DIRECTORY", "./.chroma"),
 }
 
 DEFAULT_MODEL_NAME = os.getenv("MODEL_NAME", "gemini-flash-lite-latest")
@@ -40,6 +44,16 @@ def save_config(data: dict):
 def get_model_name() -> str:
     model = load_config().get("model_name") or DEFAULT_MODEL_NAME
     return str(model).strip() or DEFAULT_MODEL_NAME
+
+
+def get_provider_name() -> str:
+    provider = load_config().get("provider") or os.getenv("AI_PROVIDER", "gemini")
+    return str(provider).strip().lower() or "gemini"
+
+
+def get_provider_model() -> str:
+    model = load_config().get("provider_model") or os.getenv("AI_PROVIDER_MODEL") or get_model_name()
+    return str(model).strip() or get_model_name()
 
 
 def embed_footer(author_display: str, query: str, max_query_len: int = 80) -> str:

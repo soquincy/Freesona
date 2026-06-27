@@ -17,7 +17,9 @@ from utils.memory import (
     inject_user_memory, extract_and_store_fact,
 )
 from utils.security import sanitize_prompt, unsafe_output
-from utils.config import LAST_DEBUG, get_model_name
+from utils.config import LAST_DEBUG, get_model_name, get_provider_name, get_provider_model
+from utils.providers import build_messages, generate_text
+from utils.chroma import query_knowledge
 
 load_dotenv()
 
@@ -25,6 +27,8 @@ logger = logging.getLogger("FreesonaBot")
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 BOT_NAME       = os.getenv("BOT_NAME", "Bot")
+
+PROVIDER = get_provider_name()
 
 # Split messaging
 SPLIT_MIN_LENGTH     = 280
@@ -36,10 +40,10 @@ SPLIT_DELAY_MAX      = 3.5
 RATE_LIMIT       = 5
 call_timestamps: list[float] = []
 
-if not GOOGLE_API_KEY:
+if PROVIDER == "gemini" and not GOOGLE_API_KEY:
     raise EnvironmentError("GOOGLE_API_KEY missing.")
 
-client = genai.Client(api_key=GOOGLE_API_KEY)
+client = genai.Client(api_key=GOOGLE_API_KEY) if PROVIDER == "gemini" else None
 
 # ---------------------------------------------------------------------------
 # Response types
@@ -314,12 +318,18 @@ async def generate(
     text         = sanitize_prompt(text)
     display_text = f"{username}: {text}" if username else text
 
-    # Build system instruction (persona + long-term user facts)
+    # Build system instruction (persona + long-term user facts + optional vector memory)
     persona = current_persona if apply_persona else ""
     if apply_persona and guild_id and user_id:
         memory_block = await inject_user_memory(guild_id, user_id, username)
         if memory_block:
             persona = f"{current_persona}\n\n{memory_block}"
+
+    if apply_persona and persona:
+        knowledge_hits = query_knowledge(text)
+        if knowledge_hits:
+            knowledge_block = "\n".join(f"- {item}" for item in knowledge_hits)
+            persona = f"{persona}\n\n[Relevant knowledge]\n{knowledge_block}"
 
     # Assemble input
     input_payload = _build_input(text, attachments, reply, instruction_prefix, username)
@@ -331,8 +341,20 @@ async def generate(
     prev_id = get_interaction_id(channel_id) if channel_id is not None else None
 
     try:
-        current_model = get_model_name()
+        current_model = get_provider_model() or get_model_name()
 
+        if get_provider_name() != "gemini":
+            output = generate_text(
+                text,
+                system_prompt=persona or "You are a helpful assistant.",
+                provider=get_provider_name(),
+                model=current_model,
+                max_output_tokens=1024,
+            )
+            if not output:
+                raise MalformedResponseError("Empty response from model.")
+            output = clean_text(output)
+            return build_response(output)
 
         kwargs: dict = dict(
             model=current_model,
