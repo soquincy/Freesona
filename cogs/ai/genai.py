@@ -94,19 +94,12 @@ def clean_sources_block(sources_text: str, max_length: int = 1024) -> str:
 class GenAICog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.setpersona_command = app_commands.Command(
-            name="setpersona",
-            description="Open the persona editor (Owner only).",
-            callback=open_persona_panel,
-        )
-        bot.tree.add_command(self.setpersona_command)
-
+    
     async def cog_load(self):
         from utils.memory import init_db
         await init_db()
 
     async def cog_unload(self):
-        self.bot.tree.remove_command("setpersona")
         for task in _pending_responses.values():
             task.cancel()
         _pending_responses.clear()
@@ -370,6 +363,13 @@ class GenAICog(commands.Cog):
 
         embed.set_footer(text=embed_footer(ctx.author.display_name, query))
         await ctx.send(embed=embed)
+
+    # -------------------------------------------------------------------
+    # Set persona
+    # -------------------------------------------------------------------
+    @app_commands.command(name="setpersona", description="Open the persona editor (Owner only).")
+    async def setpersona_cmd(self, interaction: discord.Interaction):
+        await open_persona_panel(interaction)
 
     # -------------------------------------------------------------------
     # Persona lock / unlock
