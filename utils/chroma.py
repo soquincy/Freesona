@@ -17,8 +17,10 @@ load_dotenv()
 
 def get_chroma_client() -> Any | None:
     if chromadb is None:
+        print("DEBUG: chromadb module is None!")
         return None
     persist_directory = os.getenv("CHROMA_PERSIST_DIRECTORY", "./.chroma")
+    print(f"DEBUG: Using Chroma directory: {os.path.abspath(persist_directory)}")
     return chromadb.PersistentClient(path=persist_directory)
 
 
