@@ -153,7 +153,6 @@ async def extract_and_store_fact(
     except Exception as e:
         logger.warning(f"Fact extraction failed: {e}")
 
-
 # ---------------------------------------------------------------------------
 # Migration (JSON -> SQLite) — unchanged
 # ---------------------------------------------------------------------------
