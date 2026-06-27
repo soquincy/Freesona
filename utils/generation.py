@@ -17,7 +17,7 @@ from utils.memory import (
     inject_user_memory, extract_and_store_fact,
 )
 from utils.security import sanitize_prompt, unsafe_output
-from utils.config import LAST_DEBUG, get_model_name
+from utils.config import LAST_DEBUG, get_model_name, get_provider_name
 
 load_dotenv()
 
@@ -331,8 +331,13 @@ async def generate(
     prev_id = get_interaction_id(channel_id) if channel_id is not None else None
 
     try:
+        current_provider = get_provider_name().lower()
         current_model = get_model_name()
 
+        if current_provider != "gemini":
+            raise GenerationError(
+                f"Provider '{current_provider}' is not available yet. Only 'gemini' is wired right now."
+            )
 
         kwargs: dict = dict(
             model=current_model,
