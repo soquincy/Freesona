@@ -1,12 +1,4 @@
-# cogs/ai/genai.py: GenAI cog — wiring only. Logic lives in utils/. Well, the main point of this bot in general.
-# You may disable this module with /module disable genai, though you will lose access to all AI features and commands.
-# This cog is also responsible for the on_message event that triggers AI responses, so disabling it will also stop the bot from responding to messages in channels.
-# Wolfram Alpha functionality is not affected by this and will still work if you disable this cog.
- 
-# This is a rewrite with the assistance of AI, to clean up the +1000 lines of the previous GenAI cog and split responsibilities more clearly.
-# The goal is to have this cog only handle Discord events and commands, while all the AI logic, persona management, memory, and config handling lives in utils/.
-# This should make the codebase easier to maintain and reason about, and allow for better separation of concerns.
-# The new structure also makes it easier to add features like autonomy mode, persona profiles, and web search without cluttering the main cog file.
+# cogs/ai/genai.py: GenAI cog — wiring only. Logic lives in utils/.
 
 import asyncio
 import logging
@@ -28,7 +20,7 @@ from utils.generation import (
     ConversationResponse, build_response,
 )
 from utils.roles import resolve_message_role
-from utils.memory import channel_memory, channel_summary, extract_and_store_fact, get_user_facts_prompt
+from utils.memory import clear_interaction_id, extract_and_store_fact, get_user_facts_prompt
 from utils.intent import evaluate_intent, FREQUENCY_THRESHOLD, INTENT_IGNORE
 from utils.persona import (
     PERSONA_DATA, CURRENT_PERSONA, PERSONA_LOCKED, LEGACY_DETECTED,
@@ -99,9 +91,6 @@ def clean_sources_block(sources_text: str, max_length: int = 1024) -> str:
     return "\n".join(cleaned_links)
 
 
-# (resolve_message_role has been moved to utils/roles.py)
-
-
 class GenAICog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -145,12 +134,11 @@ class GenAICog(commands.Cog):
 
         bot_id = self.bot.user.id if self.bot.user else 0
         if message.author.id == bot_id:
-            return  # Hard stop reprocessing own output
+            return
 
-        config = load_config()
+        config    = load_config()
         whitelist = config.get("whitelist_bot_ids", [])
 
-        # Ingestion filter: Ignore external bots unless they are whitelisted or webhooks
         if message.author.bot and not message.webhook_id and message.author.id not in whitelist:
             return
 
@@ -171,24 +159,23 @@ class GenAICog(commands.Cog):
             message_snapshot  = message
             guild_id_snapshot = message.guild.id
 
-            # Create structured payload with role boundaries preserved
             payload = {
-                "role": role,
+                "role":      role,
                 "author_id": user_id,
-                "username": username_snapshot,
-                "content": message.content,
-                "reply": None
+                "username":  username_snapshot,
+                "content":   message.content,
+                "reply":     None,
             }
 
             if message.reference and isinstance(message.reference.resolved, discord.Message):
                 ref = message.reference.resolved
                 payload["reply"] = {
-                    "author": ref.author.display_name,
-                    "author_id": ref.author.id,
-                    "content": ref.content or "",
-                    "is_bot": ref.author.bot,
-                    "is_webhook": ref.webhook_id is not None,
-                    "role": resolve_message_role(ref, bot_id)
+                    "author":      ref.author.display_name,
+                    "author_id":   ref.author.id,
+                    "content":     ref.content or "",
+                    "is_bot":      ref.author.bot,
+                    "is_webhook":  ref.webhook_id is not None,
+                    "role":        resolve_message_role(ref, bot_id),
                 }
 
             if user_id in _pending_responses:
@@ -223,7 +210,6 @@ class GenAICog(commands.Cog):
         # -------------------------------------------------------------------
         autonomy_on = config.get("autonomy", False)
 
-        # Only autonomy fires for user messages (not bot messages)
         if autonomy_on and role == "user":
             frequency    = config.get("autonomy_frequency", "default")
             threshold    = FREQUENCY_THRESHOLD.get(frequency, 0.50)
@@ -235,38 +221,38 @@ class GenAICog(commands.Cog):
             user_ready    = now - last_user    > AUTONOMY_USER_COOLDOWN
 
             if channel_ready and user_ready:
-                has_memory = message.channel.id in channel_memory
-                intent     = evaluate_intent(message, self.bot.user, has_memory)
+                # Autonomy doesn't track a channel interaction ID, so we pass
+                # has_memory=False — it fires as a standalone contextual response.
+                intent = evaluate_intent(message, self.bot.user, has_memory=False)
 
                 if intent.intent != INTENT_IGNORE and intent.confidence >= threshold:
-                    _autonomy_cooldown[message.channel.id]    = now
+                    _autonomy_cooldown[message.channel.id]     = now
                     _autonomy_user_cooldown[message.author.id] = now
                     logger.info(
                         f"Autonomy firing | channel={message.channel.id} "
                         f"confidence={intent.confidence:.2f} intent={intent.intent} "
                         f"targets={intent.targets}"
                     )
-                    
-                    # Create structured payload for autonomy
+
                     payload = {
-                        "role": role,
+                        "role":      role,
                         "author_id": message.author.id,
-                        "username": message.author.display_name,
-                        "content": message.content,
-                        "reply": None
+                        "username":  message.author.display_name,
+                        "content":   message.content,
+                        "reply":     None,
                     }
-                    
+
                     if message.reference and isinstance(message.reference.resolved, discord.Message):
                         ref = message.reference.resolved
                         payload["reply"] = {
-                            "author": ref.author.display_name,
-                            "author_id": ref.author.id,
-                            "content": ref.content or "",
-                            "is_bot": ref.author.bot,
+                            "author":     ref.author.display_name,
+                            "author_id":  ref.author.id,
+                            "content":    ref.content or "",
+                            "is_bot":     ref.author.bot,
                             "is_webhook": ref.webhook_id is not None,
-                            "role": resolve_message_role(ref, bot_id)
+                            "role":       resolve_message_role(ref, bot_id),
                         }
-                    
+
                     attachments = await extract_attachments(message)
                     response = await safe_generate(
                         payload,
@@ -500,14 +486,15 @@ class GenAICog(commands.Cog):
         await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
 
     # -------------------------------------------------------------------
-    # /clearmemory (short-term)
+    # /clearmemory
+    # Now clears the server-side interaction chain for the channel so the
+    # next message starts a fresh conversation with no previous_interaction_id.
     # -------------------------------------------------------------------
     @commands.hybrid_command(name='clearmemory', aliases=['smcl'], help='Clear conversation memory for this channel (Admin only).')
     @commands.has_permissions(administrator=True)
     async def clear_memory(self, ctx):
-        channel_memory.pop(ctx.channel.id, None)
-        channel_summary.pop(ctx.channel.id, None)
-        await ctx.send("Short-term channel memory cleared.")
+        clear_interaction_id(ctx.channel.id)
+        await ctx.send("Conversation memory cleared.")
 
     # -------------------------------------------------------------------
     # /memorylist (long-term SQLite)
@@ -520,8 +507,8 @@ class GenAICog(commands.Cog):
             return
 
         target_user = user or ctx.author
-        member = ctx.guild.get_member(ctx.author.id) if ctx.guild else None
-        is_admin = bool(member and (member.guild_permissions.administrator or member.guild_permissions.manage_guild))
+        member      = ctx.guild.get_member(ctx.author.id) if ctx.guild else None
+        is_admin    = bool(member and (member.guild_permissions.administrator or member.guild_permissions.manage_guild))
 
         if target_user.id != ctx.author.id and not is_admin:
             await ctx.send("❌ You can only view your own memory.", ephemeral=True)
@@ -561,8 +548,8 @@ class GenAICog(commands.Cog):
             return await ctx.send("Memory commands are server-only.")
 
         target_user = user or ctx.author
-        member = ctx.guild.get_member(ctx.author.id) if ctx.guild else None
-        is_admin = bool(member and (member.guild_permissions.administrator or member.guild_permissions.manage_guild))
+        member      = ctx.guild.get_member(ctx.author.id) if ctx.guild else None
+        is_admin    = bool(member and (member.guild_permissions.administrator or member.guild_permissions.manage_guild))
 
         if target_user.id != ctx.author.id and not is_admin:
             await ctx.send("❌ You can only clear your own memory.", ephemeral=True)
@@ -573,7 +560,7 @@ class GenAICog(commands.Cog):
                 "SELECT COUNT(*) FROM user_facts WHERE guild_id = ? AND user_id = ?",
                 (str(ctx.guild.id), str(target_user.id))
             ) as cursor:
-                row = await cursor.fetchone()
+                row   = await cursor.fetchone()
                 count = row[0] if row else 0
 
             if count > 0:
@@ -600,8 +587,8 @@ class GenAICog(commands.Cog):
             return
 
         target_user = user or ctx.author
-        member = ctx.guild.get_member(ctx.author.id) if ctx.guild else None
-        is_admin = bool(member and (member.guild_permissions.administrator or member.guild_permissions.manage_guild))
+        member      = ctx.guild.get_member(ctx.author.id) if ctx.guild else None
+        is_admin    = bool(member and (member.guild_permissions.administrator or member.guild_permissions.manage_guild))
 
         if target_user.id != ctx.author.id and not is_admin:
             await ctx.send("❌ You can only delete your own memory facts.", ephemeral=True)
@@ -609,7 +596,6 @@ class GenAICog(commands.Cog):
 
         async with aiosqlite.connect(MEMORY_FILE_PATH) as db:
             db.row_factory = aiosqlite.Row
-
             async with db.execute(
                 "SELECT message_id, content FROM user_facts WHERE guild_id = ? AND user_id = ? ORDER BY importance DESC",
                 (str(ctx.guild.id), str(target_user.id))
@@ -710,7 +696,7 @@ class GenAICog(commands.Cog):
     @commands.hybrid_group(name='botwhitelist', aliases=['bw'], invoke_without_command=True, help='Manage whitelisted bot IDs (Admin only).')  # type: ignore[call-arg]
     @commands.has_permissions(administrator=True)
     async def whitelist_group(self, ctx):
-        config = load_config()
+        config    = load_config()
         whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
         if not whitelist:
             await ctx.send("No bots are whitelisted.", ephemeral=True if ctx.interaction else False)
@@ -721,7 +707,7 @@ class GenAICog(commands.Cog):
     @whitelist_group.command(name='add', help='Add a bot ID to the whitelist.')  # type: ignore[attr-defined]
     @app_commands.describe(bot_id='The bot ID to add to the whitelist.')
     async def whitelist_add(self, ctx, bot_id: int):
-        config = load_config()
+        config    = load_config()
         whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
         if bot_id in whitelist:
             await ctx.send(f"Bot `{bot_id}` is already whitelisted.", ephemeral=True if ctx.interaction else False)
@@ -734,7 +720,7 @@ class GenAICog(commands.Cog):
     @whitelist_group.command(name='remove', help='Remove a bot ID from the whitelist.')  # type: ignore[attr-defined]
     @app_commands.describe(bot_id='The bot ID to remove from the whitelist.')
     async def whitelist_remove(self, ctx, bot_id: int):
-        config = load_config()
+        config    = load_config()
         whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
         if bot_id not in whitelist:
             await ctx.send(f"Bot `{bot_id}` is not in the whitelist.", ephemeral=True if ctx.interaction else False)

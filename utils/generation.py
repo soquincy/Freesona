@@ -11,9 +11,11 @@ from typing import Optional, Union, Dict, Any
 import discord
 from dotenv import load_dotenv
 from google import genai
-from google.genai import types
 
-from utils.memory import memory_to_contents, push_memory, inject_user_memory, extract_and_store_fact
+from utils.memory import (
+    get_interaction_id, set_interaction_id,
+    inject_user_memory, extract_and_store_fact,
+)
 from utils.security import sanitize_prompt, unsafe_output
 from utils.config import LAST_DEBUG, get_model_name
 
@@ -215,17 +217,12 @@ SUPPORTED_MIME_TYPES = {
 }
 
 async def extract_attachments(message: Optional[discord.Message]) -> list[tuple[bytes, str]]:
-    """
-    Extract all supported attachments (images + PDFs) from a message.
-    Returns a list of (bytes, mime_type) tuples in attachment order.
-    """
     if not message or not message.attachments:
         return []
 
     results = []
     for att in message.attachments:
         mime = att.content_type or ""
-        # Strip parameters e.g. "image/png; charset=utf-8" -> "image/png"
         mime_base = mime.split(";")[0].strip()
         if mime_base not in SUPPORTED_MIME_TYPES:
             continue
@@ -236,6 +233,54 @@ async def extract_attachments(message: Optional[discord.Message]) -> list[tuple[
             logger.error(f"Failed to read attachment {att.filename}: {e}")
 
     return results
+
+# ---------------------------------------------------------------------------
+# Input builder
+# ---------------------------------------------------------------------------
+
+def _build_input(
+    text: str,
+    attachments: Optional[list[tuple[bytes, str]]],
+    reply: Optional[dict],
+    instruction_prefix: str,
+    username: str,
+) -> list[dict] | str:
+    """
+    Assembles the `input` value for client.interactions.create.
+    Returns a plain string when there are no attachments and no reply context,
+    otherwise returns a content list.
+    """
+    parts: list[dict] = []
+
+    # Inject reply context as a text block before the user's message
+    if reply:
+        clarification = (
+            "When replying to a message that quotes or replies to another user's message, "
+            "address the author of the most recent message (the one who triggered the bot). "
+            "Do not attack, blame, or assume intent about the quoted message's author unless "
+            "explicitly requested by the user."
+        )
+        parts.append({"type": "text", "text": clarification})
+        parts.append({
+            "type": "text",
+            "text": f"[quoted from {reply['author']}]\n{reply['content']}",
+        })
+
+    user_text = f"{instruction_prefix}\n\n{text}".strip() if instruction_prefix else text
+    if user_text:
+        parts.append({"type": "text", "text": user_text})
+
+    for att_bytes, att_mime in (attachments or []):
+        parts.append({"type": "image", "mime_type": att_mime, "data": att_bytes})
+
+    if not parts:
+        parts.append({"type": "text", "text": "Describe this."})
+
+    # Simplify to a plain string when we only have one text block
+    if len(parts) == 1 and parts[0]["type"] == "text":
+        return parts[0]["text"]
+
+    return parts
 
 # ---------------------------------------------------------------------------
 # Core generation
@@ -255,100 +300,71 @@ async def generate(
     attachments: Optional[list[tuple[bytes, str]]] = None,
 ) -> ConversationResponse:
     await rate_limit()
-    
+
     # Handle structured payload (dict) vs raw string
     if isinstance(prompt, dict):
-        role = prompt.get("role", "user")
-        text = prompt.get("content", "")
+        role  = prompt.get("role", "user")
+        text  = prompt.get("content", "")
         reply = prompt.get("reply")
     else:
-        role = "user"
-        text = prompt or ""
+        role  = "user"
+        text  = prompt or ""
         reply = None
 
-    text = sanitize_prompt(text)
-    user_message_text = text  # ← capture here, before text gets reassigned
-    contents = memory_to_contents(channel_id) if channel_id is not None else []
-
-    if reply:
-        ref_role = reply.get("role", "user")
-        api_role = "model" if ref_role == "model" else "user"
-        # Clarify addressing rules to the model: always address the most recent message
-        # (the one that triggered the bot) rather than the quoted message's author,
-        # unless the user explicitly asks otherwise.
-        clarification = (
-            "When replying to a message that quotes or replies to another user's message, "
-            "address the author of the most recent message (the one who triggered the bot). "
-            "Do not attack, blame, or assume intent about the quoted message's author unless "
-            "explicitly requested by the user."
-        )
-        contents.append(types.Content(role="system", parts=[types.Part(text=clarification)]))
-        contents.append(types.Content(
-            role=api_role,
-            parts=[types.Part(
-                text=f"[quoted from {reply['author']}]\n{reply['content']}"
-            )]
-        ))
-
-    user_text = f"{instruction_prefix}\n\n{text}".strip() if instruction_prefix else text
+    text         = sanitize_prompt(text)
     display_text = f"{username}: {text}" if username else text
 
-    parts = []
-
-    # Inject long-term user memory into system prompt
+    # Build system instruction (persona + long-term user facts)
     persona = current_persona if apply_persona else ""
     if apply_persona and guild_id and user_id:
         memory_block = await inject_user_memory(guild_id, user_id, username)
         if memory_block:
             persona = f"{current_persona}\n\n{memory_block}"
 
-    if username:
-        user_text = f"[{username}]: {user_text}"
-    if user_text:
-        parts.append(types.Part(text=user_text))
-    for att_bytes, att_mime in (attachments or []):
-        parts.append(types.Part.from_bytes(data=att_bytes, mime_type=att_mime))
-    if not parts:
-        parts.append(types.Part(text="Describe this."))
-
-    contents.append(types.Content(role="user", parts=parts))
+    # Assemble input
+    input_payload = _build_input(text, attachments, reply, instruction_prefix, username)
 
     if channel_id is not None:
-        LAST_DEBUG[channel_id] = user_text
+        LAST_DEBUG[channel_id] = text
+
+    # Resolve previous interaction ID for server-side history
+    prev_id = get_interaction_id(channel_id) if channel_id is not None else None
 
     try:
-        config = types.GenerateContentConfig(
-            system_instruction=persona if apply_persona else None,
+        current_model = get_model_name()
+
+        kwargs: dict = dict(
+            model=current_model,
+            input=input_payload,
             max_output_tokens=1024,
         )
-        current_model = get_model_name()
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model=current_model,
-            contents=contents,
-            config=config,
+        if apply_persona and persona:
+            kwargs["system_instruction"] = persona
+        if prev_id:
+            kwargs["previous_interaction_id"] = prev_id
+
+        interaction = await asyncio.to_thread(
+            client.interactions.create,
+            **kwargs,
         )
 
-        if not response or not response.text:
+        if not interaction or not interaction.output_text:
             raise MalformedResponseError("Empty response from model.")
 
-        text = clean_text(response.text)
-        text = re.sub(rf"^{re.escape(BOT_NAME)}\s*:\s*", "", text, flags=re.IGNORECASE).strip()
+        output = clean_text(interaction.output_text)
 
-        if unsafe_output(text):
+        if unsafe_output(output):
             logger.warning("Output blocked by safety filter.")
             return build_response("I can't respond to that.")
 
+        # Persist interaction ID for conversation continuity
         if channel_id is not None and role in ("user", "webhook"):
-            push_memory(channel_id, role, display_text, display_text,
-                        client=client, model_name=current_model, username=username)
-            push_memory(channel_id, "model", f"{BOT_NAME}: {text}", f"{BOT_NAME}: {text}",
-                        client=client, model_name=current_model, username=BOT_NAME)
+            set_interaction_id(channel_id, interaction.id)
 
-        # Fire fact extraction async — only for user messages (role="user")
-        if guild_id and user_id and message_id and channel_id and user_message_text.strip() and role == "user":
+        # Fire fact extraction async — only for real user messages
+        if guild_id and user_id and message_id and channel_id and text.strip() and role == "user":
             asyncio.create_task(extract_and_store_fact(
-                message_content=user_message_text,
+                message_content=text,
                 display_name=username,
                 guild_id=guild_id,
                 user_id=user_id,
@@ -358,7 +374,7 @@ async def generate(
                 model_name=current_model,
             ))
 
-        return build_response(text)
+        return build_response(output)
 
     except GenerationError:
         raise
