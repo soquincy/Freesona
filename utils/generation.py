@@ -333,10 +333,11 @@ async def generate(
     try:
         current_model = get_model_name()
 
+
         kwargs: dict = dict(
             model=current_model,
             input=input_payload,
-            max_output_tokens=1024,
+            generation_config={"max_output_tokens": 1024},
         )
         if apply_persona and persona:
             kwargs["system_instruction"] = persona

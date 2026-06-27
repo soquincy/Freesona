@@ -28,7 +28,7 @@ class StatusCog(commands.Cog):
         server_name = guilds[self.index].name
         
         await self.bot.change_presence(
-            status=discord.Status.dnd,
+            status=discord.Status.idle,
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
                 name=server_name

@@ -94,19 +94,12 @@ def clean_sources_block(sources_text: str, max_length: int = 1024) -> str:
 class GenAICog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.setpersona_command = app_commands.Command(
-            name="setpersona",
-            description="Open the persona editor (Owner only).",
-            callback=open_persona_panel,
-        )
-        bot.tree.add_command(self.setpersona_command)
-
+    
     async def cog_load(self):
         from utils.memory import init_db
         await init_db()
 
     async def cog_unload(self):
-        self.bot.tree.remove_command("setpersona")
         for task in _pending_responses.values():
             task.cancel()
         _pending_responses.clear()
@@ -223,7 +216,7 @@ class GenAICog(commands.Cog):
             if channel_ready and user_ready:
                 # Autonomy doesn't track a channel interaction ID, so we pass
                 # has_memory=False — it fires as a standalone contextual response.
-                intent = evaluate_intent(message, self.bot.user, has_memory=False)
+                intent = evaluate_intent(message, self.bot.user, False)
 
                 if intent.intent != INTENT_IGNORE and intent.confidence >= threshold:
                     _autonomy_cooldown[message.channel.id]     = now
@@ -304,6 +297,7 @@ class GenAICog(commands.Cog):
         if ctx.guild is None:
             await ctx.send("AI commands are not available in DMs.")
             return
+        await ctx.defer() 
         attachments = await extract_attachments(ctx.message)
         response = await safe_generate(
             query,
@@ -369,6 +363,13 @@ class GenAICog(commands.Cog):
 
         embed.set_footer(text=embed_footer(ctx.author.display_name, query))
         await ctx.send(embed=embed)
+
+    # -------------------------------------------------------------------
+    # Set persona
+    # -------------------------------------------------------------------
+    @app_commands.command(name="setpersona", description="Open the persona editor (Owner only).")
+    async def setpersona_cmd(self, interaction: discord.Interaction):
+        await open_persona_panel(interaction)
 
     # -------------------------------------------------------------------
     # Persona lock / unlock
@@ -697,7 +698,7 @@ class GenAICog(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def whitelist_group(self, ctx):
         config    = load_config()
-        whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
+        whitelist = config.get("whitelist_bot_ids", [1496193431809294396])
         if not whitelist:
             await ctx.send("No bots are whitelisted.", ephemeral=True if ctx.interaction else False)
             return
@@ -706,9 +707,9 @@ class GenAICog(commands.Cog):
 
     @whitelist_group.command(name='add', help='Add a bot ID to the whitelist.')  # type: ignore[attr-defined]
     @app_commands.describe(bot_id='The bot ID to add to the whitelist.')
-    async def whitelist_add(self, ctx, bot_id: int):
+    async def whitelist_add(self, ctx, bot_id: str):
         config    = load_config()
-        whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
+        whitelist = config.get("whitelist_bot_ids", [1496193431809294396])
         if bot_id in whitelist:
             await ctx.send(f"Bot `{bot_id}` is already whitelisted.", ephemeral=True if ctx.interaction else False)
             return
@@ -719,9 +720,9 @@ class GenAICog(commands.Cog):
 
     @whitelist_group.command(name='remove', help='Remove a bot ID from the whitelist.')  # type: ignore[attr-defined]
     @app_commands.describe(bot_id='The bot ID to remove from the whitelist.')
-    async def whitelist_remove(self, ctx, bot_id: int):
+    async def whitelist_remove(self, ctx, bot_id: str):
         config    = load_config()
-        whitelist = config.get("whitelist_bot_ids", [1482682376655208548])
+        whitelist = config.get("whitelist_bot_ids", [1496193431809294396])
         if bot_id not in whitelist:
             await ctx.send(f"Bot `{bot_id}` is not in the whitelist.", ephemeral=True if ctx.interaction else False)
             return
