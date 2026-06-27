@@ -97,7 +97,7 @@ def check_public_url_guard() -> None:
 def check_provider_helpers() -> None:
     providers = reload_local_module("utils.providers")
     provider_name = providers.get_provider_name()
-    assert provider_name in {"gemini", "openai", "ollama", "nim"}
+    assert provider_name in {"gemini", "openai", "ollama", "nim", "github"}
     assert providers.get_provider_model() is not None
     assert providers.build_messages("system", "user")
 

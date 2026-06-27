@@ -8,6 +8,8 @@ Freesona is different. It's a free, open alternative to hosted persona bots — 
 
 No credits. No voting. No "upgrade to unlock." Just a bot that does what you tell it.
 
+Freesona is a **BYOK** (Bring Your Own Key) project — you provide your own API credentials, and everything runs on your infrastructure.
+
 → [Features](docs/features.md) · [Commands](docs/commands.md) · [Discord](https://discord.gg/vXPRs2cHSE)
 
 ---
@@ -26,7 +28,7 @@ No credits. No voting. No "upgrade to unlock." Just a bot that does what you tel
 
 **It handles more than text.** Attach images, PDFs, audio, video, or code files — all processed through the active provider's multimodal pipeline.
 
-**It can target multiple AI backends.** The generation flow now supports Gemini, OpenAI, Ollama, and NVIDIA NIM through a shared provider abstraction, so the same commands work across different services.
+**It can target multiple AI backends.** The generation flow now supports Gemini, OpenAI, Ollama, NVIDIA NIM, and GitHub Models through a shared provider abstraction, so the same commands work across different services.
 
 **It can also use a local knowledge base.** An optional ChromaDB-backed retrieval path is available for semantic lookups during generation, which fits the roadmap for a fuller `/kbadd`, `/kblist`, and `/kbdelete` experience.
 
@@ -79,6 +81,14 @@ GOOGLE_SEARCH_API_KEY=YOUR_GOOGLE_SEARCH_API_KEY # optional legacy fallback for 
 SEARCH_ENGINE_ID=YOUR_SEARCH_ENGINE_ID # optional legacy fallback for /search
 MODEL_NAME=gemini-flash-lite-latest
 BOT_NAME=Freesona
+AI_PROVIDER=gemini          # gemini | openai | ollama | nim | github
+AI_PROVIDER_MODEL=          # override the default model for the chosen provider
+
+# Provider API keys (set the one matching your AI_PROVIDER)
+# OPENAI_API_KEY=
+# OLLAMA_BASE_URL=http://localhost:11434/api/chat
+# NVIDIA_API_KEY=
+# GITHUB_TOKEN=             # GitHub personal access token for GitHub Models
 
 # Complimentary Tokens
 LOGOKIT_TOKEN=YOUR_LOGOKIT_KEY_HERE # for logos in RSS
@@ -142,7 +152,7 @@ Admins can control optional modules without editing `main.py`:
 /module reload <name>
 ```
 
-The bot owner can switch Gemini models without restarting, sync global slash commands, and inspect the active config:
+The bot owner can switch models without restarting, sync global slash commands, and inspect the active config:
 
 ```text
 /model show
@@ -180,6 +190,7 @@ RSS/Atom feeds can be read and managed with:
 
 * [discord.py](https://discordpy.readthedocs.io/)
 * [Google Gemini](https://ai.google.dev/)
+* [GitHub Models](https://github.com/marketplace/models)
 * [Wolfram\|Alpha](https://developer.wolframalpha.com/)
 * [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 * [MVSEP](https://mvsep.com/)
@@ -202,7 +213,7 @@ Licensed under the **MIT License**. See [LICENSE](LICENSE).
 
 ### Medium-term
 
-* [x] Multi-provider support — swap AI providers without changing command code (Gemini, OpenAI, Ollama, NVIDIA NIM)
+* [x] Multi-provider support — swap AI providers without changing command code (Gemini, OpenAI, Ollama, NVIDIA NIM, GitHub Models)
 * [ ] Message claiming system for multi-instance deployments
 * [x] RSS monitors — post matching feed items into selected channels
 * [ ] Optional generation logging — instance operators can enable local-only logs for abuse reporting and debugging; disabled by default, no data leaves the host
