@@ -304,6 +304,7 @@ class GenAICog(commands.Cog):
         if ctx.guild is None:
             await ctx.send("AI commands are not available in DMs.")
             return
+        await ctx.defer() 
         attachments = await extract_attachments(ctx.message)
         response = await safe_generate(
             query,
