@@ -97,9 +97,67 @@ def check_public_url_guard() -> None:
 def check_provider_helpers() -> None:
     providers = reload_local_module("utils.providers")
     provider_name = providers.get_provider_name()
-    assert provider_name in {"gemini", "openai", "ollama", "nim", "github"}
+    assert provider_name in {"gemini", "openai", "ollama", "nim", "azure", "groq", "openrouter"}
     assert providers.get_provider_model() is not None
     assert providers.build_messages("system", "user")
+    assert providers.normalize_provider_name("open-router") == "openrouter"
+    assert providers.normalize_provider_name("groqcloud") == "groq"
+
+
+def check_openai_compatible_providers() -> None:
+    providers = reload_local_module("utils.providers")
+    calls = []
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+    def fake_post(url, *, headers=None, json=None, timeout=None):
+        calls.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
+        return Response()
+
+    old_post = providers.requests.post
+    old_env = os.environ.copy()
+    try:
+        providers.requests.post = fake_post
+        os.environ.update({
+            "GROQ_API_KEY": "groq-key",
+            "OPENROUTER_API_KEY": "openrouter-key",
+            "OPENROUTER_SITE_URL": "https://example.com",
+            "OPENROUTER_SITE_NAME": "Freesona",
+        })
+
+        assert providers.generate_text(
+            "hello",
+            system_prompt="system",
+            provider="groq",
+            model="llama-3.3-70b-versatile",
+            max_output_tokens=32,
+        ) == "ok"
+        assert calls[-1]["url"] == "https://api.groq.com/openai/v1/chat/completions"
+        assert calls[-1]["headers"]["Authorization"] == "Bearer groq-key"
+        assert calls[-1]["json"]["max_completion_tokens"] == 32
+        assert "max_tokens" not in calls[-1]["json"]
+
+        assert providers.generate_text(
+            "hello",
+            provider="open-router",
+            model="meta-llama/llama-3.3-70b-instruct:free",
+            max_output_tokens=64,
+        ) == "ok"
+        assert calls[-1]["url"] == "https://openrouter.ai/api/v1/chat/completions"
+        assert calls[-1]["headers"]["Authorization"] == "Bearer openrouter-key"
+        assert calls[-1]["headers"]["HTTP-Referer"] == "https://example.com"
+        assert calls[-1]["headers"]["X-Title"] == "Freesona"
+        assert calls[-1]["json"]["max_completion_tokens"] == 64
+        assert "max_tokens" not in calls[-1]["json"]
+    finally:
+        providers.requests.post = old_post
+        os.environ.clear()
+        os.environ.update(old_env)
 
 
 def load_mvsep_helpers() -> dict:
@@ -238,6 +296,8 @@ def main() -> int:
         ("public URL guard", check_public_url_guard),
         ("MVSEP URL routing", check_mvsep_url_routing),
         ("module registry", check_module_registry),
+        ("provider helpers", check_provider_helpers),
+        ("OpenAI-compatible providers", check_openai_compatible_providers),
         ("RSS parser", check_rss_parser),
         ("JSON files", check_json_files),
         (".env.sample", check_env_sample),

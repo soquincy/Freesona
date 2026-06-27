@@ -28,7 +28,7 @@ Freesona is a **BYOK** (Bring Your Own Key) project — you provide your own API
 
 **It handles more than text.** Attach images, PDFs, audio, video, or code files — all processed through the active provider's multimodal pipeline.
 
-**It can target multiple AI backends.** The generation flow now supports Gemini, OpenAI, Ollama, NVIDIA NIM, and GitHub Models through a shared provider abstraction, so the same commands work across different services.
+**It can target multiple AI backends.** The generation flow now supports Gemini, OpenAI, Ollama, NVIDIA NIM, Azure AI Foundry, Groq, and OpenRouter through a shared provider abstraction, so the same commands work across different services.
 
 **It can also use a local knowledge base.** An optional ChromaDB-backed retrieval path is available for semantic lookups during generation, which fits the roadmap for a fuller `/kbadd`, `/kblist`, and `/kbdelete` experience.
 
@@ -81,14 +81,19 @@ GOOGLE_SEARCH_API_KEY=YOUR_GOOGLE_SEARCH_API_KEY # optional legacy fallback for 
 SEARCH_ENGINE_ID=YOUR_SEARCH_ENGINE_ID # optional legacy fallback for /search
 MODEL_NAME=gemini-flash-lite-latest
 BOT_NAME=Freesona
-AI_PROVIDER=gemini          # gemini | openai | ollama | nim | github
+AI_PROVIDER=gemini          # gemini | openai | ollama | nim | azure | groq | openrouter
 AI_PROVIDER_MODEL=          # override the default model for the chosen provider
 
 # Provider API keys (set the one matching your AI_PROVIDER)
 # OPENAI_API_KEY=
 # OLLAMA_BASE_URL=http://localhost:11434/api/chat
 # NVIDIA_API_KEY=
-# GITHUB_TOKEN=             # GitHub personal access token for GitHub Models
+# AZURE_AI_KEY=             # Azure AI Foundry API key
+# AZURE_AI_BASE_URL=        # your Azure AI Foundry endpoint URL
+# GROQ_API_KEY=
+# OPENROUTER_API_KEY=
+# OPENROUTER_SITE_URL=      # optional OpenRouter rankings/referrer URL
+# OPENROUTER_SITE_NAME=Freesona
 
 # Complimentary Tokens
 LOGOKIT_TOKEN=YOUR_LOGOKIT_KEY_HERE # for logos in RSS
@@ -190,7 +195,9 @@ RSS/Atom feeds can be read and managed with:
 
 * [discord.py](https://discordpy.readthedocs.io/)
 * [Google Gemini](https://ai.google.dev/)
-* [GitHub Models](https://github.com/marketplace/models)
+* [Azure AI Foundry](https://ai.azure.com/)
+* [Groq](https://groq.com/)
+* [OpenRouter](https://openrouter.ai/)
 * [Wolfram\|Alpha](https://developer.wolframalpha.com/)
 * [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 * [MVSEP](https://mvsep.com/)
@@ -213,7 +220,7 @@ Licensed under the **MIT License**. See [LICENSE](LICENSE).
 
 ### Medium-term
 
-* [x] Multi-provider support — swap AI providers without changing command code (Gemini, OpenAI, Ollama, NVIDIA NIM, GitHub Models)
+* [x] Multi-provider support — swap AI providers without changing command code (Gemini, OpenAI, Ollama, NVIDIA NIM, Azure AI Foundry, Groq, OpenRouter)
 * [ ] Message claiming system for multi-instance deployments
 * [x] RSS monitors — post matching feed items into selected channels
 * [ ] Optional generation logging — instance operators can enable local-only logs for abuse reporting and debugging; disabled by default, no data leaves the host
