@@ -18,6 +18,7 @@
 # aiosqlite: Handles databses for memory.db
 # tzdata: Provides timezone data for accurate time handling in the bot.
 # pypdf: Handles PDF files for the Chroma cog.
+# chromadb: RAG (Retrieval-Augmented Generation) database for storing and querying knowledge bases.
 
 discord.py
 python-dotenv
@@ -31,3 +32,4 @@ yt-dlp
 aiosqlite
 tzdata
 pypdf
+chromadb
