@@ -11,6 +11,7 @@ class RandomCog(commands.Cog):
 
     @commands.hybrid_command(
         name='randommember',
+        aliases=['randomuser', 'randmember', 'randuser', 'rm'],
         help='Randomly selects a server member.'
     )
     @commands.has_permissions(mention_everyone=True)
@@ -30,6 +31,7 @@ class RandomCog(commands.Cog):
 
     @commands.hybrid_command(
         name='coinflip',
+        aliases=['flipcoin', 'cf'],
         help='Flips a coin.'
     )
     async def coinflip_cmd(self, ctx):
@@ -39,6 +41,7 @@ class RandomCog(commands.Cog):
 
     @commands.hybrid_command(
         name='roll',
+        aliases=['dice', 'diceroll', 'die', 'r'],
         help='Rolls a die.'
     )
     async def roll_cmd(self, ctx, sides: int = 6):
@@ -52,6 +55,7 @@ class RandomCog(commands.Cog):
 
     @commands.hybrid_command(
         name='pick',
+        aliases=['choose', 'select', 'p'],
         help='Randomly picks from choices separated by commas.'
     )
     async def pick_cmd(self, ctx, *, choices: str):
