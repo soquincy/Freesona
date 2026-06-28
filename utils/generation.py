@@ -341,11 +341,18 @@ async def generate(
                 f"Provider '{current_provider}' is not available yet."
             )
 
+        # system_instruction is top-level, while model settings go into generation_config
         kwargs: dict[str, Any] = {
             "model": current_model,
             "input": input_payload,
-            "max_output_tokens": 1024,
+            "generation_config": {"max_output_tokens": 1024},
         }
+
+        if apply_persona and persona:
+            kwargs["system_instruction"] = persona
+
+        if prev_id:
+            kwargs["previous_interaction_id"] = prev_id
 
         if apply_persona and persona:
             kwargs["system_instruction"] = persona
