@@ -341,31 +341,40 @@ async def generate(
                 f"Provider '{current_provider}' is not available yet."
             )
 
-        kwargs: dict = dict(
-            model=current_model,
-            input=input_payload,
-            generation_config={"max_output_tokens": 1024},
-            stream=True,
-        )
+        # Unified keyword arguments payload definition for clean runtime parsing
+        kwargs: dict[str, Any] = {
+            "model": current_model,
+            "input": input_payload,
+            "config": {"max_output_tokens": 1024},
+        }
+
         if apply_persona and persona:
-            kwargs["system_instruction"] = persona
+            kwargs["config"]["system_instruction"] = persona
+
         if prev_id:
             kwargs["previous_interaction_id"] = prev_id
 
         full_text = ""
         interaction_id: Optional[str] = None
         
-        stream = await asyncio.to_thread(client.interactions.create, **kwargs)
+        # When stream=True is requested via interactions, the SDK returns an iterator 
+        # of dynamic partial interaction steps or chunk blocks.
+        stream = await asyncio.to_thread(
+            client.interactions.create,
+            stream=True,
+            **kwargs
+        )
+        
         for chunk in stream:
-            # Handle tuple variants or unstructured items safely
             if isinstance(chunk, tuple):
                 continue
                 
-            # Safely check fields with getattr to handle type variations in the stream
+            # Extracts text out of the dynamic stream delta chunk
             output_text = getattr(chunk, "output_text", None)
             if output_text:
                 full_text += str(output_text)
                 
+            # Collects the parent transaction session identifier if included in the step metadata
             chunk_id = getattr(chunk, "id", None)
             if chunk_id:
                 interaction_id = str(chunk_id)
@@ -402,7 +411,6 @@ async def generate(
         classified = _classify_error(e)
         logger.error(f"Gemini error [{type(classified).__name__}]: {e}")
         raise classified from e
-
 
 async def safe_generate(
     prompt: Optional[Union[Dict[str, Any], str]],
