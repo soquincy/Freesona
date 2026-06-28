@@ -1,5 +1,3 @@
-# utils/generation.py: Core AI generation pipeline, response types, and message sender.
-
 import os
 import re
 import asyncio
@@ -101,7 +99,7 @@ _ERROR_MESSAGES: dict[type, str] = {
     TimeoutGenerationError: "That took too long. Try again?",
     TransientError:         "Something hiccupped on my end. Try again in a bit.",
     MalformedResponseError: "I got confused by that one. Try rephrasing?",
-    GenerationError:         "Something went wrong. Try again.",
+    GenerationError:        "Something went wrong. Try again.",
 }
 
 def _user_facing_error(e: GenerationError) -> str:
@@ -357,37 +355,22 @@ async def generate(
             **kwargs
         )
         
-        for chunk in stream:
-            if isinstance(chunk, tuple):
-                continue
-                
-            # 1. Check direct string token properties (handles primary stream chunks)
-            output_text = getattr(chunk, "output_text", None) or getattr(chunk, "text", None)
-            if output_text:
-                full_text += str(output_text)
+        for event in stream:
+            event_type = getattr(event, "event_type", None)
             
-            # 2. Extract out of standard delta frames (handles StepDelta SSE structures)
-            elif getattr(chunk, "type", None) == "step_delta" or chunk.__class__.__name__ == "StepDelta":
-                delta = getattr(chunk, "delta", None)
-                if delta and hasattr(delta, "content") and hasattr(delta.content, "parts"):
-                    for part in delta.content.parts:
-                        if hasattr(part, "text") and part.text:
-                            full_text += str(part.text)
-                            
-            # 3. Dynamic fallback using getattr checks to bypass strict class union warnings
-            elif hasattr(chunk, "steps") and getattr(chunk, "steps", None):
-                chunk_steps = getattr(chunk, "steps", [])
-                for step in chunk_steps:
-                    if getattr(step, "type", None) == "model_output" or step.__class__.__name__ == "ModelOutputStep":
-                        if hasattr(step, "content") and hasattr(step.content, "parts"):
-                            for part in step.content.parts:
-                                if hasattr(part, "text") and part.text:
-                                    full_text += str(part.text)
-                
-            # Collect session record transaction ID safely
-            chunk_id = getattr(chunk, "id", None)
-            if chunk_id:
-                interaction_id = str(chunk_id)
+            # 1. Extract text from step deltas
+            if event_type == "step.delta":
+                delta = getattr(event, "delta", None)
+                if delta and getattr(delta, "type", None) == "text":
+                    text_delta = getattr(delta, "text", "")
+                    if text_delta:
+                        full_text += str(text_delta)
+                        
+            # 2. Extract interaction ID upon completion
+            elif event_type == "interaction.completed":
+                interaction = getattr(event, "interaction", None)
+                if interaction and getattr(interaction, "id", None):
+                    interaction_id = str(interaction.id)
 
         if not full_text:
             raise MalformedResponseError("Empty response from model stream.")
