@@ -1,3 +1,5 @@
+# utils/generation.py: Core AI generation pipeline, response types, and message sender.
+
 import os
 import re
 import asyncio
