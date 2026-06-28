@@ -78,7 +78,6 @@ async def init_db():
         )
         await db.commit()
 
-
 async def get_user_facts_prompt(guild_id: int, user_id: int, display_name: str) -> str:
     async with aiosqlite.connect(MEMORY_FILE_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -88,8 +87,12 @@ async def get_user_facts_prompt(guild_id: int, user_id: int, display_name: str) 
             (str(guild_id), str(user_id))
         ) as cursor:
             rows = await cursor.fetchall()
+            
+            # UPDATED BLOCK:
             if not rows:
-                return ""
+                # Return a specific statement the LLM cannot ignore
+                return f"\n[Known facts about {display_name}]\nNone. You have no record of any past interactions with this user."
+            
             lines = [f"- {row['content']}" for row in rows]
             return f"\n[Known facts about {display_name}]\n" + "\n".join(lines)
 
@@ -152,7 +155,6 @@ async def extract_and_store_fact(
 
     except Exception as e:
         logger.warning(f"Fact extraction failed: {e}")
-
 
 # ---------------------------------------------------------------------------
 # Migration (JSON -> SQLite) — unchanged

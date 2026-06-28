@@ -198,7 +198,6 @@ Licensed under the **MIT License**. See [LICENSE](LICENSE).
 
 ### Medium-term
 
-* [ ] Multi-provider support — swap AI providers without changing command code
 * [ ] Message claiming system for multi-instance deployments
 * [x] RSS monitors — post matching feed items into selected channels
 * [ ] Optional generation logging — instance operators can enable local-only logs for abuse reporting and debugging; disabled by default, no data leaves the host

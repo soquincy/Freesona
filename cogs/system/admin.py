@@ -7,7 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from utils.config import load_config, save_config, get_model_name
+from utils.config import load_config, save_config, get_model_name, get_provider_name
 from utils.modules import OPTIONAL_MODULES, load_enabled_modules, module_extension, save_module_state
 
 MODEL_CHOICES = [
@@ -16,6 +16,8 @@ MODEL_CHOICES = [
     "gemini-2.5-pro",
     "gemini-2.0-flash",
 ]
+
+PROVIDER_CHOICES = ["gemini", "openai", "anthropic", "nvidia-nim"]
 
 
 async def module_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
@@ -33,6 +35,15 @@ async def model_autocomplete(interaction: discord.Interaction, current: str) -> 
         app_commands.Choice(name=model, value=model)
         for model in MODEL_CHOICES
         if current in model.lower()
+    ][:25]
+
+
+async def provider_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    current = current.lower()
+    return [
+        app_commands.Choice(name=provider, value=provider)
+        for provider in PROVIDER_CHOICES
+        if current in provider.lower()
     ][:25]
 
 
@@ -181,6 +192,44 @@ class AdminCog(commands.Cog):
         config.pop("model_name", None)
         save_config(config)
         await ctx.send(f"Model reset to `{get_model_name()}`.", ephemeral=True if ctx.interaction else False)
+
+    # ------------------------------------------------------------------
+    # /provider
+    # ------------------------------------------------------------------
+    @commands.hybrid_group(name="provider", fallback="current", help="Show or change the active provider.")
+    @commands.is_owner()
+    async def provider_group(self, ctx):
+        await ctx.send(f"Current provider: `{get_provider_name()}`", ephemeral=True if ctx.interaction else False)
+
+    @provider_group.command(name="show", help="Show the active provider.")
+    @commands.is_owner()
+    async def provider_show(self, ctx):
+        await ctx.send(f"Current provider: `{get_provider_name()}`", ephemeral=True if ctx.interaction else False)
+
+    @provider_group.command(name="set", help="Set the active provider.")
+    @commands.is_owner()
+    @app_commands.autocomplete(name=provider_autocomplete)
+    async def provider_set(self, ctx, name: str):
+        normalized = name.strip().lower()
+        if normalized not in PROVIDER_CHOICES:
+            await ctx.send(
+                f"Unknown provider `{name}`. Choose from: {', '.join(PROVIDER_CHOICES)}.",
+                ephemeral=True if ctx.interaction else False,
+            )
+            return
+
+        config = load_config()
+        config["provider"] = normalized
+        save_config(config)
+        await ctx.send(f"Provider set to `{get_provider_name()}`.", ephemeral=True if ctx.interaction else False)
+
+    @provider_group.command(name="reset", help="Reset the active provider to the environment/default value.")
+    @commands.is_owner()
+    async def provider_reset(self, ctx):
+        config = load_config()
+        config.pop("provider", None)
+        save_config(config)
+        await ctx.send(f"Provider reset to `{get_provider_name()}`.", ephemeral=True if ctx.interaction else False)
 
     # ------------------------------------------------------------------
     # /sync

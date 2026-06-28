@@ -5,6 +5,8 @@ import re
 import asyncio
 import logging
 import time
+import base64
+
 from dataclasses import dataclass, field
 from typing import Optional, Union, Dict, Any
 
@@ -17,7 +19,7 @@ from utils.memory import (
     inject_user_memory, extract_and_store_fact,
 )
 from utils.security import sanitize_prompt, unsafe_output
-from utils.config import LAST_DEBUG, get_model_name
+from utils.config import LAST_DEBUG, get_model_name, get_provider_name
 
 load_dotenv()
 
@@ -183,34 +185,34 @@ async def send_response(
         return
 
     for i, segment in enumerate(segments):
-        if segment.typing and segment.delay > 0:
-            async with channel.typing():
-                await asyncio.sleep(segment.delay)
+            try:
+                if segment.typing and segment.delay > 0:
+                    async with channel.typing():
+                        await asyncio.sleep(segment.delay)
 
-        if i == 0 and reply_to is not None:
-            await reply_to.reply(segment.text)
-        else:
-            await channel.send(segment.text)
+                if i == 0 and reply_to is not None:
+                    await reply_to.reply(segment.text)
+                else:
+                    await channel.send(segment.text)
+            except discord.Forbidden:
+                channel_id = getattr(channel, "id", "Unknown")
+                logger.warning(f"Missing permissions to send messages in channel {channel_id}")
+                return  # Stop trying to send the rest of the segments
 
 # ---------------------------------------------------------------------------
 # Attachment helper
 # ---------------------------------------------------------------------------
 
 SUPPORTED_MIME_TYPES = {
-    # Images
     "image/png", "image/jpeg", "image/webp", "image/gif", "image/heic", "image/heif",
-    # Documents
     "application/pdf",
     "text/plain", "text/html", "text/css", "text/markdown", "text/csv",
     "text/xml", "text/rtf",
     "application/rtf",
-    # Code
     "application/x-javascript", "text/javascript",
     "application/x-python", "text/x-python",
-    # Audio
     "audio/mpeg", "audio/mp3", "audio/wav", "audio/aiff",
     "audio/aac", "audio/ogg", "audio/flac", "audio/x-flac",
-    # Video
     "video/mp4", "video/mpeg", "video/mov", "video/quicktime",
     "video/avi", "video/x-msvideo", "video/webm",
     "video/wmv", "video/x-ms-wmv", "video/3gpp",
@@ -244,43 +246,48 @@ def _build_input(
     reply: Optional[dict],
     instruction_prefix: str,
     username: str,
-) -> list[dict] | str:
+) -> list[dict[str, Any]]:
     """
-    Assembles the `input` value for client.interactions.create.
-    Returns a plain string when there are no attachments and no reply context,
-    otherwise returns a content list.
+    Assembles a multi-modal prompt payload compatible with the 
+    Generally Available (GA) client.interactions.create input schema.
     """
-    parts: list[dict] = []
+    payload: list[dict[str, Any]] = []
 
-    # Inject reply context as a text block before the user's message
     if reply:
         clarification = (
             "When replying to a message that quotes or replies to another user's message, "
-            "address the author of the most recent message (the one who triggered the bot). "
-            "Do not attack, blame, or assume intent about the quoted message's author unless "
-            "explicitly requested by the user."
+            "address the author of the most recent message. "
+            "Do not attack, blame, or assume intent unless explicitly requested."
         )
-        parts.append({"type": "text", "text": clarification})
-        parts.append({
-            "type": "text",
-            "text": f"[quoted from {reply['author']}]\n{reply['content']}",
-        })
+        payload.append({"type": "text", "text": clarification})
+        payload.append({"type": "text", "text": f"[quoted from {reply['author']}]:\n{reply['content']}"})
 
     user_text = f"{instruction_prefix}\n\n{text}".strip() if instruction_prefix else text
     if user_text:
-        parts.append({"type": "text", "text": user_text})
+        payload.append({"type": "text", "text": user_text})
 
     for att_bytes, att_mime in (attachments or []):
-        parts.append({"type": "image", "mime_type": att_mime, "data": att_bytes})
+        b64_data = base64.b64encode(att_bytes).decode("utf-8")
+        
+        if att_mime.startswith("image/"):
+            media_type = "image"
+        elif att_mime.startswith("audio/"):
+            media_type = "audio"
+        elif att_mime.startswith("video/"):
+            media_type = "video"
+        else:
+            media_type = "document"
 
-    if not parts:
-        parts.append({"type": "text", "text": "Describe this."})
+        payload.append({
+            "type": media_type,
+            "data": b64_data,
+            "mime_type": att_mime
+        })
 
-    # Simplify to a plain string when we only have one text block
-    if len(parts) == 1 and parts[0]["type"] == "text":
-        return parts[0]["text"]
+    if not payload:
+        payload.append({"type": "text", "text": "Hello"})
 
-    return parts
+    return payload
 
 # ---------------------------------------------------------------------------
 # Core generation
@@ -301,7 +308,6 @@ async def generate(
 ) -> ConversationResponse:
     await rate_limit()
 
-    # Handle structured payload (dict) vs raw string
     if isinstance(prompt, dict):
         role  = prompt.get("role", "user")
         text  = prompt.get("content", "")
@@ -311,58 +317,80 @@ async def generate(
         text  = prompt or ""
         reply = None
 
-    text         = sanitize_prompt(text)
-    display_text = f"{username}: {text}" if username else text
+    text = sanitize_prompt(text)
 
-    # Build system instruction (persona + long-term user facts)
     persona = current_persona if apply_persona else ""
     if apply_persona and guild_id and user_id:
         memory_block = await inject_user_memory(guild_id, user_id, username)
         if memory_block:
             persona = f"{current_persona}\n\n{memory_block}"
 
-    # Assemble input
     input_payload = _build_input(text, attachments, reply, instruction_prefix, username)
 
     if channel_id is not None:
         LAST_DEBUG[channel_id] = text
 
-    # Resolve previous interaction ID for server-side history
     prev_id = get_interaction_id(channel_id) if channel_id is not None else None
 
     try:
+        current_provider = get_provider_name().lower()
         current_model = get_model_name()
 
+        if current_provider != "gemini":
+            raise GenerationError(
+                f"Provider '{current_provider}' is not available yet."
+            )
 
-        kwargs: dict = dict(
-            model=current_model,
-            input=input_payload,
-            generation_config={"max_output_tokens": 1024},
-        )
+        kwargs: dict[str, Any] = {
+            "model": current_model,
+            "input": input_payload,
+            "generation_config": {"max_output_tokens": 1024},
+        }
+
         if apply_persona and persona:
             kwargs["system_instruction"] = persona
+
         if prev_id:
             kwargs["previous_interaction_id"] = prev_id
 
-        interaction = await asyncio.to_thread(
+        full_text = ""
+        interaction_id: Optional[str] = None
+        
+        stream = await asyncio.to_thread(
             client.interactions.create,
-            **kwargs,
+            stream=True,
+            **kwargs
         )
+        
+        for event in stream:
+            event_type = getattr(event, "event_type", None)
+            
+            # 1. Extract text from step deltas
+            if event_type == "step.delta":
+                delta = getattr(event, "delta", None)
+                if delta and getattr(delta, "type", None) == "text":
+                    text_delta = getattr(delta, "text", "")
+                    if text_delta:
+                        full_text += str(text_delta)
+                        
+            # 2. Extract interaction ID upon completion
+            elif event_type == "interaction.completed":
+                interaction = getattr(event, "interaction", None)
+                if interaction and getattr(interaction, "id", None):
+                    interaction_id = str(interaction.id)
 
-        if not interaction or not interaction.output_text:
-            raise MalformedResponseError("Empty response from model.")
+        if not full_text:
+            raise MalformedResponseError("Empty response from model stream.")
 
-        output = clean_text(interaction.output_text)
+        output = clean_text(full_text)
 
         if unsafe_output(output):
             logger.warning("Output blocked by safety filter.")
             return build_response("I can't respond to that.")
 
-        # Persist interaction ID for conversation continuity
-        if channel_id is not None and role in ("user", "webhook"):
-            set_interaction_id(channel_id, interaction.id)
+        if channel_id is not None and interaction_id:
+            set_interaction_id(channel_id, interaction_id)
 
-        # Fire fact extraction async — only for real user messages
         if guild_id and user_id and message_id and channel_id and text.strip() and role == "user":
             asyncio.create_task(extract_and_store_fact(
                 message_content=text,
@@ -383,7 +411,6 @@ async def generate(
         classified = _classify_error(e)
         logger.error(f"Gemini error [{type(classified).__name__}]: {e}")
         raise classified from e
-
 
 async def safe_generate(
     prompt: Optional[Union[Dict[str, Any], str]],

@@ -14,7 +14,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import os
 
-from utils.config import load_config, save_config, embed_footer, LAST_DEBUG, get_model_name
+from utils.config import load_config, save_config, embed_footer, LAST_DEBUG, get_model_name, get_provider_name
 from utils.generation import (
     safe_generate, send_response, extract_attachments,
     ConversationResponse, build_response,
@@ -204,6 +204,14 @@ class GenAICog(commands.Cog):
         autonomy_on = config.get("autonomy", False)
 
         if autonomy_on and role == "user":
+            # Guard: Verify write permissions before processing anything
+            bot_member = message.guild.get_member(bot_id)
+            if bot_member:
+                perms = message.channel.permissions_for(bot_member)
+                if not perms.send_messages:
+                    return
+
+            # Timer calculations
             frequency    = config.get("autonomy_frequency", "default")
             threshold    = FREQUENCY_THRESHOLD.get(frequency, 0.50)
             now          = time.time()
@@ -257,7 +265,7 @@ class GenAICog(commands.Cog):
                         username=message.author.display_name,
                         attachments=attachments,
                     )
-                    await send_response(response, message.channel)
+                    await send_response(response, message.channel, reply_to=message)
 
     # -------------------------------------------------------------------
     # ~write
@@ -478,6 +486,7 @@ class GenAICog(commands.Cog):
         response_mode   = config.get("conversation_response_mode", "all")
         embed = discord.Embed(title="Persona Debug", color=discord.Color.yellow())
         embed.add_field(name="Locked",      value=locked,  inline=True)
+        embed.add_field(name="Provider",    value=get_provider_name(), inline=True)
         embed.add_field(name="Model",       value=get_model_name(), inline=True)
         embed.add_field(name="Legacy Mode", value=legacy,  inline=True)
         embed.add_field(name="Autonomy",    value=f"{autonomy_status} ({autonomy_freq})", inline=True)

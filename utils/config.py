@@ -8,9 +8,11 @@ CONFIG_PATH = os.getenv("CONFIG_FILE_PATH", "config.json")
 DEFAULT_CONFIG = {
     "prefix": "~",
     "conversation_response_mode": "all",
+    "provider": "gemini",
 }
 
 DEFAULT_MODEL_NAME = os.getenv("MODEL_NAME", "gemini-flash-lite-latest")
+DEFAULT_PROVIDER_NAME = os.getenv("PROVIDER", "gemini")
 
 LAST_DEBUG: dict[int, str] = {}
 
@@ -40,6 +42,11 @@ def save_config(data: dict):
 def get_model_name() -> str:
     model = load_config().get("model_name") or DEFAULT_MODEL_NAME
     return str(model).strip() or DEFAULT_MODEL_NAME
+
+
+def get_provider_name() -> str:
+    provider = load_config().get("provider") or DEFAULT_PROVIDER_NAME
+    return str(provider).strip().lower() or DEFAULT_PROVIDER_NAME
 
 
 def embed_footer(author_display: str, query: str, max_query_len: int = 80) -> str:
