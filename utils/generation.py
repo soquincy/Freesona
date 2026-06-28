@@ -341,15 +341,14 @@ async def generate(
                 f"Provider '{current_provider}' is not available yet."
             )
 
-        # Unified keyword arguments payload definition for clean runtime parsing
         kwargs: dict[str, Any] = {
             "model": current_model,
             "input": input_payload,
-            "config": {"max_output_tokens": 1024},
+            "max_output_tokens": 1024,
         }
 
         if apply_persona and persona:
-            kwargs["config"]["system_instruction"] = persona
+            kwargs["system_instruction"] = persona
 
         if prev_id:
             kwargs["previous_interaction_id"] = prev_id
@@ -357,8 +356,6 @@ async def generate(
         full_text = ""
         interaction_id: Optional[str] = None
         
-        # When stream=True is requested via interactions, the SDK returns an iterator 
-        # of dynamic partial interaction steps or chunk blocks.
         stream = await asyncio.to_thread(
             client.interactions.create,
             stream=True,
