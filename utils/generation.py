@@ -5,6 +5,8 @@ import re
 import asyncio
 import logging
 import time
+import base64
+
 from dataclasses import dataclass, field
 from typing import Optional, Union, Dict, Any
 
@@ -239,29 +241,53 @@ def _build_input(
     reply: Optional[dict],
     instruction_prefix: str,
     username: str,
-) -> list:
-    parts = []
+) -> list[dict[str, Any]]:
+    """
+    Assembles a multi-modal prompt payload compatible with the 
+    Generally Available (GA) client.interactions.create input schema.
+    """
+    payload: list[dict[str, Any]] = []
 
+    # 1. Handle thread context / reply instructions
     if reply:
         clarification = (
             "When replying to a message that quotes or replies to another user's message, "
             "address the author of the most recent message. "
             "Do not attack, blame, or assume intent unless explicitly requested."
         )
-        parts.append(genai.types.Part.from_text(text=clarification))
-        parts.append(genai.types.Part.from_text(text=f"[quoted from {reply['author']}]\n{reply['content']}"))
+        payload.append({"type": "text", "text": clarification})
+        payload.append({"type": "text", "text": f"[quoted from {reply['author']}]:\n{reply['content']}"})
 
+    # 2. Append main prompt text content
     user_text = f"{instruction_prefix}\n\n{text}".strip() if instruction_prefix else text
     if user_text:
-        parts.append(genai.types.Part.from_text(text=user_text))
+        payload.append({"type": "text", "text": user_text})
 
+    # 3. Append base64 encoded media attachments mapping to respective type strings
     for att_bytes, att_mime in (attachments or []):
-        parts.append(genai.types.Part.from_bytes(data=att_bytes, mime_type=att_mime))
+        b64_data = base64.b64encode(att_bytes).decode("utf-8")
+        
+        # Determine specific structural payload type token based on MIME prefix
+        if att_mime.startswith("image/"):
+            media_type = "image"
+        elif att_mime.startswith("audio/"):
+            media_type = "audio"
+        elif att_mime.startswith("video/"):
+            media_type = "video"
+        else:
+            media_type = "document"
 
-    if not parts:
-        parts.append(genai.types.Part.from_text(text="Describe this."))
+        payload.append({
+            "type": media_type,
+            "data": b64_data,
+            "mime_type": att_mime
+        })
 
-    return parts
+    # Fallback default text element if the payload array ends up completely empty
+    if not payload:
+        payload.append({"type": "text", "text": "Hello"})
+
+    return payload
 
 # ---------------------------------------------------------------------------
 # Core generation
