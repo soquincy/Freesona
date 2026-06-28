@@ -19,6 +19,7 @@
 # tzdata: Provides timezone data for accurate time handling in the bot.
 # pypdf: Handles PDF files for the Chroma cog.
 # chromadb: RAG (Retrieval-Augmented Generation) database for storing and querying knowledge bases.
+# onnxruntime: Required by ChromaDB's default embedding function (all-MiniLM-L6-v2 via ONNX, lighter than torch).
 
 discord.py
 python-dotenv
@@ -33,3 +34,4 @@ aiosqlite
 tzdata
 pypdf
 chromadb
+onnxruntime

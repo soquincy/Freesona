@@ -41,7 +41,7 @@ DEBOUNCE_SECONDS          = 1.2
 AUTONOMY_COOLDOWN_SECONDS = 120
 AUTONOMY_USER_COOLDOWN    = 60
 
-_pending_responses: dict[int, asyncio.Task] = {}
+_pending_responses: dict[tuple[int, int], asyncio.Task] = {}
 _autonomy_cooldown: dict[int, float]        = {}
 _autonomy_user_cooldown: dict[int, float]   = {}
 
@@ -171,11 +171,12 @@ class GenAICog(commands.Cog):
                     "role":        resolve_message_role(ref, bot_id),
                 }
 
-            if user_id in _pending_responses:
-                _pending_responses[user_id].cancel()
-                logger.debug(f"Debounce: cancelled pending task for user {user_id}")
+            _debounce_key = (user_id, channel_snapshot.id)
+            if _debounce_key in _pending_responses:
+                _pending_responses[_debounce_key].cancel()
+                logger.debug(f"Debounce: cancelled pending task for user {user_id} in channel {channel_snapshot.id}")
 
-            async def debounced_respond():
+            async def debounced_respond(_key=_debounce_key):
                 try:
                     await asyncio.sleep(DEBOUNCE_SECONDS)
                     attachments = await extract_attachments(message_snapshot)
@@ -191,11 +192,11 @@ class GenAICog(commands.Cog):
                     )
                     await send_response(response, channel_snapshot, reply_to=message_snapshot)
                 except asyncio.CancelledError:
-                    logger.debug(f"Debounce: task cancelled for user {user_id}")
+                    logger.debug(f"Debounce: task cancelled for user {user_id} in channel {channel_snapshot.id}")
                 finally:
-                    _pending_responses.pop(user_id, None)
+                    _pending_responses.pop(_key, None)
 
-            _pending_responses[user_id] = asyncio.create_task(debounced_respond())
+            _pending_responses[_debounce_key] = asyncio.create_task(debounced_respond())
             return
 
         # -------------------------------------------------------------------
