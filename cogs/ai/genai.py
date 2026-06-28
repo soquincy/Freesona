@@ -204,6 +204,14 @@ class GenAICog(commands.Cog):
         autonomy_on = config.get("autonomy", False)
 
         if autonomy_on and role == "user":
+            # Guard: Verify write permissions before processing anything
+            bot_member = message.guild.get_member(bot_id)
+            if bot_member:
+                perms = message.channel.permissions_for(bot_member)
+                if not perms.send_messages:
+                    return
+
+            # Timer calculations
             frequency    = config.get("autonomy_frequency", "default")
             threshold    = FREQUENCY_THRESHOLD.get(frequency, 0.50)
             now          = time.time()
