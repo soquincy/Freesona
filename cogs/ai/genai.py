@@ -257,7 +257,7 @@ class GenAICog(commands.Cog):
                         username=message.author.display_name,
                         attachments=attachments,
                     )
-                    await send_response(response, message.channel)
+                    await send_response(response, message.channel, reply_to=message)
 
     # -------------------------------------------------------------------
     # ~write
