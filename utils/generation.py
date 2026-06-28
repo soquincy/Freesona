@@ -95,7 +95,7 @@ def _classify_error(e: Exception) -> GenerationError:
     return GenerationError(str(e))
 
 _ERROR_MESSAGES: dict[type, str] = {
-    RateLimitError:         "I'm a little overwhelmed right now — give me a moment.",
+    RateLimitError:        "I'm a little overwhelmed right now — give me a moment.",
     TimeoutGenerationError: "That took too long. Try again?",
     TransientError:         "Something hiccupped on my end. Try again in a bit.",
     MalformedResponseError: "I got confused by that one. Try rephrasing?",
@@ -197,20 +197,15 @@ async def send_response(
 # ---------------------------------------------------------------------------
 
 SUPPORTED_MIME_TYPES = {
-    # Images
     "image/png", "image/jpeg", "image/webp", "image/gif", "image/heic", "image/heif",
-    # Documents
     "application/pdf",
     "text/plain", "text/html", "text/css", "text/markdown", "text/csv",
     "text/xml", "text/rtf",
     "application/rtf",
-    # Code
     "application/x-javascript", "text/javascript",
     "application/x-python", "text/x-python",
-    # Audio
     "audio/mpeg", "audio/mp3", "audio/wav", "audio/aiff",
     "audio/aac", "audio/ogg", "audio/flac", "audio/x-flac",
-    # Video
     "video/mp4", "video/mpeg", "video/mov", "video/quicktime",
     "video/avi", "video/x-msvideo", "video/webm",
     "video/wmv", "video/x-ms-wmv", "video/3gpp",
@@ -244,41 +239,27 @@ def _build_input(
     reply: Optional[dict],
     instruction_prefix: str,
     username: str,
-) -> list[dict] | str:
-    """
-    Assembles the `input` value for client.interactions.create.
-    Returns a plain string when there are no attachments and no reply context,
-    otherwise returns a content list.
-    """
-    parts: list[dict] = []
+) -> list:
+    parts = []
 
-    # Inject reply context as a text block before the user's message
     if reply:
         clarification = (
             "When replying to a message that quotes or replies to another user's message, "
-            "address the author of the most recent message (the one who triggered the bot). "
-            "Do not attack, blame, or assume intent about the quoted message's author unless "
-            "explicitly requested by the user."
+            "address the author of the most recent message. "
+            "Do not attack, blame, or assume intent unless explicitly requested."
         )
-        parts.append({"type": "text", "text": clarification})
-        parts.append({
-            "type": "text",
-            "text": f"[quoted from {reply['author']}]\n{reply['content']}",
-        })
+        parts.append(genai.types.Part.from_text(text=clarification))
+        parts.append(genai.types.Part.from_text(text=f"[quoted from {reply['author']}]\n{reply['content']}"))
 
     user_text = f"{instruction_prefix}\n\n{text}".strip() if instruction_prefix else text
     if user_text:
-        parts.append({"type": "text", "text": user_text})
+        parts.append(genai.types.Part.from_text(text=user_text))
 
     for att_bytes, att_mime in (attachments or []):
-        parts.append({"type": "image", "mime_type": att_mime, "data": att_bytes})
+        parts.append(genai.types.Part.from_bytes(data=att_bytes, mime_type=att_mime))
 
     if not parts:
-        parts.append({"type": "text", "text": "Describe this."})
-
-    # Simplify to a plain string when we only have one text block
-    if len(parts) == 1 and parts[0]["type"] == "text":
-        return parts[0]["text"]
+        parts.append(genai.types.Part.from_text(text="Describe this."))
 
     return parts
 
@@ -301,7 +282,6 @@ async def generate(
 ) -> ConversationResponse:
     await rate_limit()
 
-    # Handle structured payload (dict) vs raw string
     if isinstance(prompt, dict):
         role  = prompt.get("role", "user")
         text  = prompt.get("content", "")
@@ -311,23 +291,19 @@ async def generate(
         text  = prompt or ""
         reply = None
 
-    text         = sanitize_prompt(text)
-    display_text = f"{username}: {text}" if username else text
+    text = sanitize_prompt(text)
 
-    # Build system instruction (persona + long-term user facts)
     persona = current_persona if apply_persona else ""
     if apply_persona and guild_id and user_id:
         memory_block = await inject_user_memory(guild_id, user_id, username)
         if memory_block:
             persona = f"{current_persona}\n\n{memory_block}"
 
-    # Assemble input
     input_payload = _build_input(text, attachments, reply, instruction_prefix, username)
 
     if channel_id is not None:
         LAST_DEBUG[channel_id] = text
 
-    # Resolve previous interaction ID for server-side history
     prev_id = get_interaction_id(channel_id) if channel_id is not None else None
 
     try:
@@ -336,38 +312,50 @@ async def generate(
 
         if current_provider != "gemini":
             raise GenerationError(
-                f"Provider '{current_provider}' is not available yet. Only 'gemini' is wired right now."
+                f"Provider '{current_provider}' is not available yet."
             )
 
         kwargs: dict = dict(
             model=current_model,
             input=input_payload,
             generation_config={"max_output_tokens": 1024},
+            stream=True,
         )
         if apply_persona and persona:
             kwargs["system_instruction"] = persona
         if prev_id:
             kwargs["previous_interaction_id"] = prev_id
 
-        interaction = await asyncio.to_thread(
-            client.interactions.create,
-            **kwargs,
-        )
+        full_text = ""
+        interaction_id: Optional[str] = None
+        
+        stream = await asyncio.to_thread(client.interactions.create, **kwargs)
+        for chunk in stream:
+            # Handle tuple variants or unstructured items safely
+            if isinstance(chunk, tuple):
+                continue
+                
+            # Safely check fields with getattr to handle type variations in the stream
+            output_text = getattr(chunk, "output_text", None)
+            if output_text:
+                full_text += str(output_text)
+                
+            chunk_id = getattr(chunk, "id", None)
+            if chunk_id:
+                interaction_id = str(chunk_id)
 
-        if not interaction or not interaction.output_text:
+        if not full_text:
             raise MalformedResponseError("Empty response from model.")
 
-        output = clean_text(interaction.output_text)
+        output = clean_text(full_text)
 
         if unsafe_output(output):
             logger.warning("Output blocked by safety filter.")
             return build_response("I can't respond to that.")
 
-        # Persist interaction ID for conversation continuity
-        if channel_id is not None and role in ("user", "webhook"):
-            set_interaction_id(channel_id, interaction.id)
+        if channel_id is not None and interaction_id:
+            set_interaction_id(channel_id, interaction_id)
 
-        # Fire fact extraction async — only for real user messages
         if guild_id and user_id and message_id and channel_id and text.strip() and role == "user":
             asyncio.create_task(extract_and_store_fact(
                 message_content=text,
