@@ -187,14 +187,19 @@ async def send_response(
         return
 
     for i, segment in enumerate(segments):
-        if segment.typing and segment.delay > 0:
-            async with channel.typing():
-                await asyncio.sleep(segment.delay)
+            try:
+                if segment.typing and segment.delay > 0:
+                    async with channel.typing():
+                        await asyncio.sleep(segment.delay)
 
-        if i == 0 and reply_to is not None:
-            await reply_to.reply(segment.text)
-        else:
-            await channel.send(segment.text)
+                if i == 0 and reply_to is not None:
+                    await reply_to.reply(segment.text)
+                else:
+                    await channel.send(segment.text)
+            except discord.Forbidden:
+                channel_id = getattr(channel, "id", "Unknown")
+                logger.warning(f"Missing permissions to send messages in channel {channel_id}")
+                return  # Stop trying to send the rest of the segments
 
 # ---------------------------------------------------------------------------
 # Attachment helper
