@@ -97,11 +97,11 @@ def _classify_error(e: Exception) -> GenerationError:
     return GenerationError(str(e))
 
 _ERROR_MESSAGES: dict[type, str] = {
-    RateLimitError:        "I'm a little overwhelmed right now — give me a moment.",
+    RateLimitError:         "I'm a little overwhelmed right now — give me a moment.",
     TimeoutGenerationError: "That took too long. Try again?",
     TransientError:         "Something hiccupped on my end. Try again in a bit.",
     MalformedResponseError: "I got confused by that one. Try rephrasing?",
-    GenerationError:        "Something went wrong. Try again.",
+    GenerationError:         "Something went wrong. Try again.",
 }
 
 def _user_facing_error(e: GenerationError) -> str:
@@ -248,7 +248,6 @@ def _build_input(
     """
     payload: list[dict[str, Any]] = []
 
-    # 1. Handle thread context / reply instructions
     if reply:
         clarification = (
             "When replying to a message that quotes or replies to another user's message, "
@@ -258,16 +257,13 @@ def _build_input(
         payload.append({"type": "text", "text": clarification})
         payload.append({"type": "text", "text": f"[quoted from {reply['author']}]:\n{reply['content']}"})
 
-    # 2. Append main prompt text content
     user_text = f"{instruction_prefix}\n\n{text}".strip() if instruction_prefix else text
     if user_text:
         payload.append({"type": "text", "text": user_text})
 
-    # 3. Append base64 encoded media attachments mapping to respective type strings
     for att_bytes, att_mime in (attachments or []):
         b64_data = base64.b64encode(att_bytes).decode("utf-8")
         
-        # Determine specific structural payload type token based on MIME prefix
         if att_mime.startswith("image/"):
             media_type = "image"
         elif att_mime.startswith("audio/"):
@@ -283,7 +279,6 @@ def _build_input(
             "mime_type": att_mime
         })
 
-    # Fallback default text element if the payload array ends up completely empty
     if not payload:
         payload.append({"type": "text", "text": "Hello"})
 
@@ -341,18 +336,11 @@ async def generate(
                 f"Provider '{current_provider}' is not available yet."
             )
 
-        # system_instruction is top-level, while model settings go into generation_config
         kwargs: dict[str, Any] = {
             "model": current_model,
             "input": input_payload,
             "generation_config": {"max_output_tokens": 1024},
         }
-
-        if apply_persona and persona:
-            kwargs["system_instruction"] = persona
-
-        if prev_id:
-            kwargs["previous_interaction_id"] = prev_id
 
         if apply_persona and persona:
             kwargs["system_instruction"] = persona
@@ -373,18 +361,36 @@ async def generate(
             if isinstance(chunk, tuple):
                 continue
                 
-            # Extracts text out of the dynamic stream delta chunk
-            output_text = getattr(chunk, "output_text", None)
+            # 1. Check direct string token properties (handles primary stream chunks)
+            output_text = getattr(chunk, "output_text", None) or getattr(chunk, "text", None)
             if output_text:
                 full_text += str(output_text)
+            
+            # 2. Extract out of standard delta frames (handles StepDelta SSE structures)
+            elif getattr(chunk, "type", None) == "step_delta" or chunk.__class__.__name__ == "StepDelta":
+                delta = getattr(chunk, "delta", None)
+                if delta and hasattr(delta, "content") and hasattr(delta.content, "parts"):
+                    for part in delta.content.parts:
+                        if hasattr(part, "text") and part.text:
+                            full_text += str(part.text)
+                            
+            # 3. Dynamic fallback using getattr checks to bypass strict class union warnings
+            elif hasattr(chunk, "steps") and getattr(chunk, "steps", None):
+                chunk_steps = getattr(chunk, "steps", [])
+                for step in chunk_steps:
+                    if getattr(step, "type", None) == "model_output" or step.__class__.__name__ == "ModelOutputStep":
+                        if hasattr(step, "content") and hasattr(step.content, "parts"):
+                            for part in step.content.parts:
+                                if hasattr(part, "text") and part.text:
+                                    full_text += str(part.text)
                 
-            # Collects the parent transaction session identifier if included in the step metadata
+            # Collect session record transaction ID safely
             chunk_id = getattr(chunk, "id", None)
             if chunk_id:
                 interaction_id = str(chunk_id)
 
         if not full_text:
-            raise MalformedResponseError("Empty response from model.")
+            raise MalformedResponseError("Empty response from model stream.")
 
         output = clean_text(full_text)
 
