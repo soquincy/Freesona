@@ -340,9 +340,27 @@ class GenAICog(commands.Cog):
 
         result = await web_search(query)
 
+        if result.failed:
+            embed = discord.Embed(
+                title=f"Search: {query}",
+                description=(
+                    "Search is temporarily unavailable (the search models are "
+                    "overloaded or unreachable right now). Try again in a bit."
+                ),
+                color=discord.Color.red()
+            )
+            url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
+            embed.add_field(name="Full results", value=url, inline=False)
+            embed.set_footer(text=embed_footer(ctx.author.display_name, query))
+            await ctx.send(embed=embed)
+            return
+
         if result.has_sources:
             text = result.text[:4096]
         else:
+            # result.failed is False here, so result.text is real grounded
+            # output from Gemini, just without extractable source chunks.
+            # Safe to summarize — not a hallucination risk.
             response = await safe_generate(
                 f"Summarize these search results:\n\n{result.text}",
                 current_persona=CURRENT_PERSONA,
